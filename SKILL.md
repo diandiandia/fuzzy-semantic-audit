@@ -5,9 +5,18 @@ description: Discover 0-day logic vulnerabilities using the CWE-699 Software Dev
 
 # Fuzzy Semantic Audit Protocol (V4.0)
 
-This skill automates parallel 0-day vulnerability analysis by leveraging CodeGraph, AI-generated semantic vulnerability prompts, test-suite heuristic pruning, advanced auditing methods (Trifecta Proof, Taint Analysis, Attack Surface Analysis), and concurrent subagents orchestrated via a Node.js workflow.
+This skill automates parallel 0-day vulnerability analysis by leveraging CodeGraph, AI-generated semantic vulnerability prompts, test-suite heuristic pruning, advanced auditing methods (Trifecta Proof, Taint Analysis, Attack Surface Analysis), and concurrent subagents orchestrated via a Workflow (Claude Code / Antigravity `agent`/`pipeline`/`parallel` APIs).
 
 ## 🚀 Execution Procedures
+
+> **Environment variables (set these first):**
+> ```bash
+> export SKILL=/path/to/fuzzy-semantic-audit          # this skill's root directory
+> export VENV_PY="$SKILL/.venv-embed/bin/python"       # isolated interpreter with fastembed installed
+> ```
+> ⚠️ **Interpreter note**: `fastembed` (required by the M2 vector layer) is installed **only** in `.venv-embed`.
+> Any step that touches the vector index — Step 4 (build) and Step 6 (explorer) — MUST run with `$VENV_PY`,
+> not the system `python3`, or it will crash with `ImportError: fastembed`. Steps 2/3 may use plain `python3`.
 
 ### Step 1: Initialize CodeGraph Indexing
 Ensure the CodeGraph index is initialized and active for the target project:
@@ -29,26 +38,26 @@ python3 -m src.m3_locate.audit_orchestrator init --catalog "$SKILL/resources/cwe
 ```
 
 ### Step 4: Build Vector Index (M2)
-Build the vector database using fastembed for semantic search. (Although the explorer will lazily build it if missing, explicit pre-building is recommended):
+Build the vector database using fastembed for semantic search. (Although the explorer will lazily build it if missing, explicit pre-building is recommended). **Must use `$VENV_PY`** (fastembed lives in `.venv-embed`):
 ```bash
-python3 -m src.m2_index.vector_index build --project "/path/to/target/project" --lang cpp
+"$VENV_PY" -m src.m2_index.vector_index build --project "/path/to/target/project" --lang cpp
 ```
 
 ### Step 5: AI-Driven Prompt/Intent Synthesis (M6)
-Orchestrate the LLM to translate CWE tasks into specific semantic queries and vulnerability templates using the JavaScript workflow:
+Orchestrate the LLM to translate CWE tasks into specific semantic queries and vulnerability templates using the JavaScript workflow. **This step MUST complete before Step 6** — otherwise the explorer falls back to degenerate keyword search (garbage-in, see System Design §9):
 > **How to Run**: Prompt the coding assistant (Claude Code or Antigravity) to run this workflow:
-> *"Run the JavaScript workflow at `workflows/generate_intents_workflow.js` with parameters: planPath = '$SKILL/resources/audit_plan.json', repoRoot = '$SKILL'"*
+> *"Run the JavaScript workflow at `workflows/generate_intents_workflow.js` with parameters: planPath = '$SKILL/resources/audit_plan.json', repoRoot = '$SKILL', venvPython = '$SKILL/.venv-embed/bin/python'"*
 
 ### Step 6: Run Semantic Exploration & Struct/Caller Tracing (M3)
-Query CodeGraph and vector similarity search, trace callers (for reachability), filter boilerplates and directories (monitor/tools/client/unit/emulator), and export candidate packages:
+Query CodeGraph and vector similarity search, trace callers (for reachability), filter boilerplates and directories (monitor/tools/client/unit/emulator), and export candidate packages. **Must use `$VENV_PY`** (this step performs vector search and requires fastembed). Ensure Step 5 has already populated semantic intents:
 ```bash
-python3 -m src.m3_locate.explorer --plan "$SKILL/resources/audit_plan.json" --project "/path/to/target/project"
+"$VENV_PY" -m src.m3_locate.explorer --plan "$SKILL/resources/audit_plan.json" --project "/path/to/target/project"
 ```
 
 ### Step 7: Execute Automated Verification Workflow (M4)
-Run the Node.js verification workflow to perform two-stage severity filtering (Stage 1) and parallel referee verification (Stage 2), update verdicts, and compile the final report:
+Run the JavaScript verification workflow to perform two-stage severity filtering (Stage 1) and parallel referee verification (Stage 2), update verdicts, and compile the final report:
 > **How to Run**: Prompt the coding assistant (Claude Code or Antigravity) to run this workflow:
-> *"Run the JavaScript workflow at `workflows/verify_workflow.js` with parameters: planPath = '$SKILL/resources/audit_plan.json', projectPath = '/path/to/target/project', candDir = '/path/to/target/project/.audit_temp/pending_cands', repoRoot = '$SKILL', limit = 20"*
+> *"Run the JavaScript workflow at `workflows/verify_workflow.js` with parameters: planPath = '$SKILL/resources/audit_plan.json', projectPath = '/path/to/target/project', candDir = '/path/to/target/project/.audit_temp/pending_cands', repoRoot = '$SKILL', venvPython = '$SKILL/.venv-embed/bin/python', limit = 20"*
 
 ---
 
