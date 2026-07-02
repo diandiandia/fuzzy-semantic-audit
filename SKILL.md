@@ -48,8 +48,8 @@ Orchestrate the LLM to translate CWE tasks into specific semantic queries and vu
 > **How to Run**: Prompt the coding assistant (Claude Code or Antigravity) to run this workflow:
 > *"Run the JavaScript workflow at `workflows/generate_intents_workflow.js` with parameters: planPath = '$SKILL/resources/audit_plan.json', repoRoot = '$SKILL', venvPython = '$SKILL/.venv-embed/bin/python'"*
 
-### Step 6: Run Semantic Exploration & Struct/Caller Tracing (M3)
-Query CodeGraph and vector similarity search, trace callers (for reachability), filter boilerplates and directories (monitor/tools/client/unit/emulator), and export candidate packages. **Must use `$VENV_PY`** (this step performs vector search and requires fastembed). Ensure Step 5 has already populated semantic intents:
+### Step 6: Run Semantic Exploration & Call-Chain Assembly (M3)
+Recall candidates via **three roads** — vector semantic search + CodeGraph symbol query + (for logic-flaw CWEs) resource-access recall — then assemble each candidate's `call_chain_context` (upstream callers + downstream callees), filter boilerplate/blacklisted directories (monitor/tools/client/unit/emulator), and export candidate packages. **Must use `$VENV_PY`** (this step performs vector search and requires fastembed). Ensure Step 5 has already populated semantic intents:
 ```bash
 "$VENV_PY" -m src.m3_locate.explorer --plan "$SKILL/resources/audit_plan.json" --project "/path/to/target/project"
 ```
@@ -65,24 +65,31 @@ Run the JavaScript verification workflow to perform two-stage severity filtering
 
 During candidate verification, the workflow employs a two-stage filtering process:
 
+> **Cross-function reasoning (关键)**: every candidate package carries a `call_chain_context` field
+> (upstream callers + downstream callees). Logic vulnerabilities (越权/状态机/信任边界) have NO syntactic
+> signature and cannot be judged from a single function — the referees reason over this call-chain slice.
+
 ### Stage 1: Fast Severity Filter (安全等级评估过滤)
-A single agent evaluates the potential security severity (1 to 10) of the candidate code based on its functionality (e.g., handles untrusted input vs. pure logging/debugging). If the rating is `< 5`, the candidate is immediately classified as `false_positive` (low severity, excluded) and skips the expensive verification stage.
+A single agent evaluates the potential security severity (1 to 10) of the candidate code. High severity includes not only untrusted-input/crypto/memory handling, but ALSO functions that access a resource by a caller-supplied id/key/path or perform a state transition (order/payment/session) — prime logic-flaw surfaces with no syntactic signature. If the rating is `< 5`, the candidate is classified as `false_positive` and skips the expensive verification stage.
 
 ### Stage 2: Parallel Adversarial Referees (三视角对抗验证)
-If severity is `≥ 5`, the workflow spawns parallel subagents evaluating the target functions across three distinct perspectives with a default falsification stance (默认"证伪"立场):
+If severity is `≥ 5`, the workflow spawns parallel subagents evaluating the target functions across three distinct perspectives with a default falsification stance (默认"证伪"立场). Each lens now covers both memory-class and logic-class flaws:
 
-1. **Path Reachability (路径可达性)**:
-   - Verify if the function is accessible from untrusted external inputs/interfaces (IPC, socket recv, public API).
-   - If the entrypoint is unknown, mock, or test code, the reachability must be falsified.
+1. **Path Reachability & Trust Boundary (路径可达性 + 信任边界)**:
+   - Verify if the function is reachable from untrusted external inputs/interfaces (IPC, socket recv, public/HTTP API, route handler) via the upstream callers.
+   - Trust-boundary confusion: is data assumed internal-only actually reachable from an external caller?
+   - If the entrypoint is unknown, mock, or test code, reachability must be falsified.
 
-2. **Guard Validity (守卫有效性)**:
-   - Identify boundary checks, size limits, authorization checks, mutex locks, or state assertions.
-   - Prove if the checks are bypassable; if not, the candidate is marked as safe.
+2. **Guard Validity & Missing Authorization (守卫有效性 + 缺失授权)**:
+   - Identify bounds/size/auth checks, locks, state assertions in the function AND its callers.
+   - **BOLA/IDOR lens**: if the function acts on a caller-supplied id/key/path, an ownership/permission check must exist **on this call path** — a check existing elsewhere does not count. Missing → real.
+   - Prove if guards are bypassable; if valid, mark safe.
 
-3. **Control-Flow Exploitability (可触发性)**:
-   - Trace the flow of untrusted variables from source to sink (Taint Analysis).
-   - Verify if input manipulation can trigger logic failures, out-of-bounds reads/writes, or memory corruption.
-   - Require a concrete attack path to prove exploitability.
+3. **Exploitability: Control-Flow / State-Machine / Race (可触发性 + 状态机 + 竞态)**:
+   - Trace untrusted variables source→sink across the chain (Taint Analysis).
+   - State-machine bypass: can a required prior step (payment/validation/auth) be skipped by calling directly or reordering calls?
+   - TOCTOU/race: is there a check-then-use gap on shared/filesystem state?
+   - Require a concrete attack path (memory corruption OR logic bypass) to prove exploitability.
 
 ---
 

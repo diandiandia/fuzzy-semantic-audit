@@ -73,11 +73,15 @@
 - **职责**:给 M4 裁判提供可达性证据(系统设计 §10 假设C)
 - **接口契约**:
   ```
-  get_source(symbol) -> str            # node 命令,函数源码+trail
-  get_callers(symbol) -> List[str]     # 可达性(降级:见下)
-  reachability_hint(file) -> str       # ★文件路径粗可达性分流(§10 降级方案)
+  get_source(symbol) -> str                    # node 命令,函数源码+trail
+  get_callers(symbol) -> List[str]             # 可达性(降级:见下)
+  get_callees(symbol) -> List[str]             # ★P1:下游被调,看数据交给了谁
+  explore(query) -> str                        # ★P1:相关符号源码+调用路径
+  build_call_chain_context(symbol) -> str      # ★P1:上游callers+下游callees 拼成调用链切片
+  reachability_hint(file) -> str               # ★文件路径粗可达性分流(§10 降级方案)
   ```
 - **降级(§10 实测)**:`callers` 不可靠 → 主用 `get_source` 的 trail + `reachability_hint`(src/=高可达,monitor|tools|unit=低)。
+- **★P1 调用链切片(系统设计 §13.2)**:逻辑漏洞(越权/状态机/信任边界)是跨函数的,`build_call_chain_context` 把上游 callers(谁能到达/是否校验)+ 下游 callees(是否敏感 sink)拼成切片,写入候选包 `call_chain_context` 字段,供 M4 裁判做跨函数推理。
 
 ### M3 — 定位召回模块 [移植+改]
 - **职责**:对每个 CWE 任务,用 intent 召回候选函数,补上下文,剪枝,写入 plan。
@@ -85,9 +89,11 @@
 - **改动(系统设计 §7 P0)**:
   1. **双路召回**:M2a 向量(语义)+ M2b codegraph(精确符号),合并去重。
   2. **目录过滤剪枝**:在 `is_boilerplate_or_test` 基础上**加目录黑名单**(monitor/tools/client/unit/emulator)—— 砍 §10 实测的 32% 噪声。
-  3. **技术栈预扫描裁剪** [移植 audit_orchestrator 的 PRE_SCAN_KEYWORDS,不变]。
+  3. **技术栈预扫描裁剪**:[移植] 逻辑不变,规则外置到 `resources/prescan_rules.json`(P0)。
+  4. **★第三路资源访问召回(P2-a,系统设计 §13.3)**:仅对逻辑漏洞类 CWE(`LOGIC_FLAW_CWES`)开启,用资源访问信号词把"按传入标识访问资源"的函数灌进候选池(`recall_source="resource"`),补"缺失校验"型越权。带 `limit` 确定性闸门。⚠️ 词法级,待真实数据验证。
 - **输入**:catalog + intents(见 M6)+ project
 - **输出**:plan 的 `result_candidates`(pending 候选)+ 剪枝后的候选包
+- **★P1 候选包扩展**:每个候选带 `call_chain_context`(调 M2b),裁判 instructions 增加逻辑漏洞视角(缺失授权/IDOR、状态机绕过、TOCTOU、信任边界)。
 
 ### M4 — 验证编排模块 ★新增(P1 核心,Workflow)
 系统设计 §4 + §12 实测确定。
@@ -99,7 +105,11 @@
   读 pending → 去重(barrier, file:function:cwe) → pipeline 每候选:
     stageA  上下文补全(调 M2b)
     stageB1 安全等级过滤(单 Agent 评估 1-10，<5 直接判定为 false_positive 并跳过验证)
-    stageB2 parallel 三视角裁判(仅对 severity >= 5，可达/守卫/触发，默认证伪)
+    stageB2 parallel 三视角裁判(仅对 severity >= 5，默认证伪)：
+             ├ 裁判1 可达性 + 信任边界混淆
+             ├ 裁判2 守卫有效性 + 缺失授权(BOLA/IDOR，须在 THIS PATH 上有校验)
+             └ 裁判3 可触发性 + 状态机绕过 + TOCTOU/竞态
+            三视角均读候选包的 call_chain_context 做跨函数推理(★P1)
   → 非对称阈值三桶归类 → 调 M4-Python 回写 verdict
   ```
 - **三桶阈值(§12 实测钉死,不可改为多数票)**:
@@ -155,7 +165,7 @@
   "entrypoint": "调用者或 reachability_hint",
   "verdict": "pending|verified|needs_review|false_positive",  // ★新增 needs_review
   "triage_explanation": "",
-  "recall_source": "vector|symbol|both",   // ★新增:双路召回来源
+  "recall_source": "vector|symbol|both|resource",   // ★双路召回来源;resource=P2-a 资源访问召回(逻辑漏洞补召回)
   "votes": [ /* ★新增:三视角投票留痕,可溯源 */ ]
 }
 ```
@@ -179,25 +189,25 @@
 
 ```
 fuzzy-semantic-audit/
-├── SKILL.md                      # L3 方法论,删人肉分批,Step7→拉Workflow
-├── SYSTEM_DESIGN.md              # 系统设计(已完成)
+├── SKILL.md                      # L3 方法论,Step→拉 Workflow(含 venv/多语言指引)
+├── SYSTEM_DESIGN.md              # 系统设计(§13 记录 P0/P1/P2-a 通用化改造)
 ├── SOFTWARE_ARCHITECTURE.md      # 本文档
 ├── .venv-embed/                  # M2a 隔离环境(fastembed,不污染系统py)
 ├── resources/
 │   ├── 699.xml
-│   ├── cwe_catalog.json          # M1 产出
+│   ├── cwe_699_catalog.json      # M1 产出
+│   ├── prescan_rules.json        # ★P0:外置技术栈预扫描规则
 │   └── audit_plan.json           # 单一真相源
-├── src/                          # ★重构后模块(旧scripts参考移植)
-│   ├── m1_cwe/                   # CWE解析裁剪
-│   ├── m2_index/                 # 向量检索 + codegraph封装
-│   ├── m3_locate/                # 双路召回+剪枝
-│   ├── m5_report/                # 三桶报告
-│   └── common/                   # plan读写、schema、错误处理
-├── workflows/
-│   └── verify_workflow.js        # M4 编排(JS)
-└── src/
-    └── m3_locate/
-        └── audit_orchestrator.py # 新增定位初始化脚本 (从 scripts.legacy 移入)
+├── src/
+│   ├── common/                   # plan_manager(读写)+ ★lang_utils(P0 语言映射)
+│   ├── m1_cwe/                   # cwe_parser:CWE解析裁剪
+│   ├── m2_index/                 # vector_index(向量) + codegraph_wrapper(★P1 调用链切片)
+│   ├── m3_locate/                # explorer(★三路召回)+ intent_generator + audit_orchestrator
+│   ├── m4_verify/                # trifecta_verifier:verdict 回写 CLI
+│   └── m5_report/                # reporter:三桶报告(★动态语言标签)
+└── workflows/
+    ├── generate_intents_workflow.js  # M6 语义 intent 生成(JS)
+    └── verify_workflow.js            # M4 编排:三视角对抗验证(JS,★逻辑漏洞视角)
 ```
 
 ---
