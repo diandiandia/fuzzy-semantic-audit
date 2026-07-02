@@ -28,23 +28,27 @@ Detect the dominant language and technology stack, prune irrelevant CWE tasks, a
 python3 -m src.m3_locate.audit_orchestrator init --catalog "$SKILL/resources/cwe_699_catalog.json" --project "/path/to/target/project" --output "$SKILL/resources/audit_plan.json"
 ```
 
-### Step 4: AI-Driven Prompt/Intent Synthesis (M6)
-Orchestrate LLM to translate CWE tasks into specific semantic queries and vulnerability templates:
+### Step 4: Build Vector Index (M2)
+Build the vector database using fastembed for semantic search. (Although the explorer will lazily build it if missing, explicit pre-building is recommended):
 ```bash
-python3 -m src.m3_locate.intent_generator --plan "$SKILL/resources/audit_plan.json"
+python3 -m src.m2_index.vector_index build --project "/path/to/target/project" --lang cpp
 ```
 
-### Step 5: Run Semantic Exploration & Struct/Caller Tracing (M3)
+### Step 5: AI-Driven Prompt/Intent Synthesis (M6)
+Orchestrate the LLM to translate CWE tasks into specific semantic queries and vulnerability templates using the JavaScript workflow:
+> **How to Run**: Prompt the coding assistant (Claude Code or Antigravity) to run this workflow:
+> *"Run the JavaScript workflow at `workflows/generate_intents_workflow.js` with parameters: planPath = '$SKILL/resources/audit_plan.json', repoRoot = '$SKILL'"*
+
+### Step 6: Run Semantic Exploration & Struct/Caller Tracing (M3)
 Query CodeGraph and vector similarity search, trace callers (for reachability), filter boilerplates and directories (monitor/tools/client/unit/emulator), and export candidate packages:
 ```bash
 python3 -m src.m3_locate.explorer --plan "$SKILL/resources/audit_plan.json" --project "/path/to/target/project"
 ```
 
-### Step 6: Execute Automated Verification Workflow (M4)
-Run the Node.js workflow script to verify candidates concurrently, apply non-symmetric voting thresholds, update candidates, and automatically generate the final three-bucket report:
-```bash
-node "$SKILL/workflows/verify_workflow.js" --plan "$SKILL/resources/audit_plan.json" --limit 20
-```
+### Step 7: Execute Automated Verification Workflow (M4)
+Run the Node.js verification workflow to perform two-stage severity filtering (Stage 1) and parallel referee verification (Stage 2), update verdicts, and compile the final report:
+> **How to Run**: Prompt the coding assistant (Claude Code or Antigravity) to run this workflow:
+> *"Run the JavaScript workflow at `workflows/verify_workflow.js` with parameters: planPath = '$SKILL/resources/audit_plan.json', projectPath = '/path/to/target/project', candDir = '/path/to/target/project/.audit_temp/pending_cands', repoRoot = '$SKILL', limit = 20"*
 
 ---
 
