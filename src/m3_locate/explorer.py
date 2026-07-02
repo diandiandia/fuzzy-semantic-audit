@@ -13,6 +13,25 @@ from src.m2_index.codegraph_wrapper import get_source, get_callers, reachability
 
 BLACKLIST_FOLDERS = {"monitor", "tools", "client", "unit", "emulator", "test", "tests", "mock", "mocks", "benchmark", "benchmarks", "gtest"}
 
+# P2-a 召回补强:逻辑漏洞类 CWE(越权/授权/信任边界/会话/资源访问控制)。
+# 这些漏洞的本质是"缺失的检查",向量/关键词只召回"存在的坏代码",召不回"本该有却没有的校验"
+# → 对这些 CWE 额外开一路"资源访问召回":把所有接受 id/key/path 并访问资源的函数灌进候选池,
+#   交给 P1 的调用链裁判去判"这条路径上有没有做归属校验"。纯内存类 CWE(如 416)不启用,避免噪声。
+LOGIC_FLAW_CWES = {
+    "266", "269", "276", "280", "284", "285", "286", "287", "288", "290", "294",
+    "306", "346", "352", "359", "362", "384", "425", "441", "552",
+    "601", "639", "640", "708", "732", "749", "770", "807", "836",
+    "862", "863", "913", "917", "1220",
+}
+
+# 资源访问信号词:函数体里出现这些,通常意味着"按调用方传入的标识访问资源"——越权高发区。
+RESOURCE_ACCESS_SIGNALS = [
+    "findById", "findOne", "find_by_id", "get_by_id", "getById", "load", "fetch",
+    "req.params", "req.query", "req.body", "@PathVariable", "@RequestParam",
+    "user_id", "userId", "account", "order", "resource", "owner", "session",
+    "SELECT", "query(", "cursor.execute", "objects.get", "open(", "read(",
+]
+
 def check_codegraph_index(project_path):
     print("Checking CodeGraph index status...")
     status_cmd = ["codegraph", "status", project_path]
@@ -96,6 +115,36 @@ def is_boilerplate_or_test(file_path, func_name, code_snippet, target_lang):
 
     return False
 
+def resource_access_recall(project_path, recalled_symbols, limit=40):
+    """P2-a 第三路召回:抓所有"按传入标识访问资源"的函数(越权高发区)。
+
+    确定性、不烧 token:用资源访问信号词走 codegraph query,命中的函数标记 source="resource"。
+    仅对逻辑漏洞类 CWE 调用(见 LOGIC_FLAW_CWES)。limit 是确定性闸门,防候选池失控。
+    """
+    added = 0
+    for signal in RESOURCE_ACCESS_SIGNALS:
+        if added >= limit:
+            break
+        lex_results = run_codegraph_query(signal, project_path)
+        for entry in lex_results:
+            if added >= limit:
+                break
+            node = entry.get("node", {})
+            name = node.get("name")
+            if not name or node.get("kind") not in ["function", "method"]:
+                continue
+            if name not in recalled_symbols:
+                recalled_symbols[name] = {
+                    "file": node.get("filePath", "unknown"),
+                    "line": node.get("startLine", 1),
+                    "source": "resource",
+                }
+                added += 1
+            elif recalled_symbols[name]["source"] in ("vector", "symbol"):
+                recalled_symbols[name]["source"] = "both"
+    return added
+
+
 def process_task(task, project_path, target_lang, max_candidates):
     cwe_id = task["cwe_id"]
     cwe_name = task["cwe_name"]
@@ -137,7 +186,13 @@ def process_task(task, project_path, target_lang, max_candidates):
             else:
                 if recalled_symbols[name]["source"] == "vector":
                     recalled_symbols[name]["source"] = "both"
-                    
+
+    # C. Resource-Access Recall (P2-a): 仅对逻辑漏洞类 CWE 开启,补召回"缺失校验"型越权。
+    if cwe_id in LOGIC_FLAW_CWES:
+        n = resource_access_recall(project_path, recalled_symbols)
+        if n:
+            print(f"[+] CWE-{cwe_id}: resource-access recall added {n} candidate functions.")
+
     # Now process recalled candidates
     candidates = []
     
