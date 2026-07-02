@@ -102,7 +102,14 @@ def is_boilerplate_or_test(file_path, func_name, code_snippet, target_lang):
         return True
 
     # 3. Test functions check
-    if any(x in func_name for x in ["TEST", "TEST_F", "BM_", "mock"]):
+    # C++: TEST, TEST_F, BM_
+    # Python/Go/Java: test_, Test*, unittest, mock, benchmark
+    test_keywords = ["TEST", "TEST_F", "BM_", "mock", "unittest", "benchmark"]
+    if any(x in func_name for x in test_keywords):
+        return True
+    if target_lang == "go" and func_name.startswith("Test"):
+        return True
+    if target_lang == "python" and (func_name.startswith("test_") or func_name.lower().startswith("test")):
         return True
 
     # 4. Code snippet heuristics

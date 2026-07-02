@@ -15,8 +15,24 @@ _PRESCAN_RULES_PATH = os.path.join(
 )
 _FALLBACK_PRESCAN = {
     "memory": {
-        "patterns": [r"malloc", r"free", r"calloc", r"realloc", r"memcpy", r"memmove", r"memset", r"delete", r"new\s"],
+        "patterns": [r"malloc", r"free", r"calloc", r"realloc", r"memcpy", r"memmove", r"memset", r"delete", r"new\s", r"pointer", r"dereference"],
         "cwes": ["119", "120", "121", "122", "125", "415", "416", "476", "787", "824"]
+    },
+    "concurrency": {
+        "patterns": [r"thread", r"mutex", r"lock", r"synchronized", r"concurrent", r"go func"],
+        "cwes": ["362", "413", "543", "567", "662", "663", "820", "821", "833", "1038", "1058"]
+    },
+    "network": {
+        "patterns": [r"socket", r"connect", r"recv", r"send", r"http", r"requests", r"fetch"],
+        "cwes": ["252", "295", "406", "601", "611", "918", "1007"]
+    },
+    "authz": {
+        "patterns": [r"auth", r"permission", r"role", r"user", r"session", r"login"],
+        "cwes": ["285", "639", "862", "863", "266", "306"]
+    },
+    "injection": {
+        "patterns": [r"exec", r"system", r"eval", r"subprocess", r"query", r"execute"],
+        "cwes": ["77", "78", "79", "89", "90", "94"]
     }
 }
 

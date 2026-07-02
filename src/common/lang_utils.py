@@ -40,12 +40,18 @@ def markdown_tag(target_lang):
     """返回给定语言的 markdown 代码块标签;未知语言退回空标签(纯 ``` 围栏)。"""
     if not target_lang:
         return ""
-    return MARKDOWN_LANG.get(target_lang.lower(), "")
+    lang = target_lang.lower()
+    if lang in ("typescript", "ts", "javascript"):
+        lang = "js"
+    return MARKDOWN_LANG.get(lang, "")
 
 
 def extensions_for(target_lang):
     """返回给定语言的源文件扩展名集合;未知语言退回 C/C++ 集合作为兜底。"""
-    return LANG_EXTENSIONS.get((target_lang or "").lower(), LANG_EXTENSIONS[DEFAULT_LANG])
+    lang = (target_lang or "").lower()
+    if lang in ("typescript", "ts", "javascript"):
+        lang = "js"
+    return LANG_EXTENSIONS.get(lang, LANG_EXTENSIONS[DEFAULT_LANG])
 
 
 def all_source_extensions():
