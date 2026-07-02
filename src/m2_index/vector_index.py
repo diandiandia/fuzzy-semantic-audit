@@ -46,7 +46,7 @@ def build_index(project_path, target_lang="cpp"):
     
     # 1. Get all files in CodeGraph flat structure
     cmd = ["codegraph", "files", "-p", project_path, "--format", "flat", "-j"]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, capture_output=True, text=True, cwd=project_path)
     if res.returncode != 0:
         print("Error: Failed to fetch files from CodeGraph index.")
         return False
@@ -85,7 +85,7 @@ def build_index(project_path, target_lang="cpp"):
     
     def process_file_symbols(file_path):
         f_cmd = ["codegraph", "node", "-p", project_path, file_path, "--symbols-only"]
-        f_res = subprocess.run(f_cmd, capture_output=True, text=True)
+        f_res = subprocess.run(f_cmd, capture_output=True, text=True, cwd=project_path)
         if f_res.returncode != 0:
             return []
             

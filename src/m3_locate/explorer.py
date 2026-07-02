@@ -15,11 +15,11 @@ BLACKLIST_FOLDERS = {"monitor", "tools", "client", "unit", "emulator", "test", "
 def check_codegraph_index(project_path):
     print("Checking CodeGraph index status...")
     status_cmd = ["codegraph", "status", project_path]
-    result = subprocess.run(status_cmd, capture_output=True, text=True)
+    result = subprocess.run(status_cmd, capture_output=True, text=True, cwd=project_path)
     if result.returncode != 0:
         print(f"CodeGraph index not found or uninitialized in {project_path}. Initializing...")
         init_cmd = ["codegraph", "init", project_path]
-        init_res = subprocess.run(init_cmd, capture_output=True, text=True)
+        init_res = subprocess.run(init_cmd, capture_output=True, text=True, cwd=project_path)
         if init_res.returncode != 0:
             print(f"Error initializing CodeGraph index: {init_res.stderr}", file=sys.stderr)
             sys.exit(1)
@@ -29,7 +29,7 @@ def check_codegraph_index(project_path):
 
 def run_codegraph_query(query, project_path):
     cmd = ["codegraph", "query", "-p", project_path, "-l", "15", "-j", query]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_path)
     if result.returncode != 0:
         return []
     try:

@@ -17,7 +17,7 @@ const PLAN = A.planPath
 const CAND_DIR = A.candDir
 const PROJECT = A.projectPath
 const PY = A.venvPython || 'python3'
-const LIMIT = typeof A.limit === 'number' ? A.limit : 20
+const LIMIT = typeof A.limit === 'number' ? A.limit : 200
 const REPO = A.repoRoot // fuzzy-semantic-audit dir, for `python -m src....`
 
 if (!PLAN || !CAND_DIR || !REPO) {
@@ -62,7 +62,26 @@ const PENDING_SCHEMA = {
   },
 }
 
-// ---- referee prompt builders (default-falsification stance, System Design §12) ----
+const SEVERITY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['severity', 'reason'],
+  properties: {
+    severity: { type: 'integer', minimum: 1, maximum: 10 },
+    reason: { type: 'string' },
+  },
+}
+
+// ---- severity and referee prompt builders (default-falsification stance, System Design §12) ----
+function severityPrompt(pkgPath) {
+  return `You are a security triage assistant.
+Read the candidate package JSON at: ${pkgPath} (use the Read tool).
+Assess the potential security severity (1 to 10) of verifying this candidate function for a security vulnerability matching the specified CWE.
+Considerations:
+- High Severity (5-10): The function directly processes untrusted network packets, user input, cryptography, authentication, authorization, memory allocation/copy, or system commands.
+- Low Severity (1-4): The function is auxiliary code, such as logging, debugging, UI rendering, configuration loading, test helpers, or standard boilerplate.
+Return the required JSON containing 'severity' and 'reason'.`
+}
 function reachabilityPrompt(pkgPath) {
   return `You are Referee 1 — PATH REACHABILITY.
 Read the candidate package JSON at: ${pkgPath} (use the Read tool). It contains cwe_id, cwe_name, file, function, code_snippet, struct_definitions, entrypoint_candidate.
@@ -146,17 +165,38 @@ async function run() {
   // pipeline: each candidate flows through context+referees independently — NO barrier, no early quit
   const results = await pipeline(
     targets,
-    // stage 1: three parallel referees, each reads the package itself
-    (t) => parallel([
-      () => agent(reachabilityPrompt(`${CAND_DIR}/${t.candidateId}.json`), { label: `reach:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
-      () => agent(guardPrompt(`${CAND_DIR}/${t.candidateId}.json`), { label: `guard:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
-      () => agent(exploitPrompt(`${CAND_DIR}/${t.candidateId}.json`), { label: `exploit:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
-    ]).then(votes => ({ target: t, votes: votes.filter(Boolean) })),
-    // stage 2: triage + writeback (writeback is an agent shelling trifecta_verifier)
-    async (rv, t, i) => {
-      const { target, votes } = rv
-      const verdict = triage(votes)
-      const explanation = explain(verdict, votes)
+    // stage 1: Fast Severity Filter + parallel referees if needed
+    async (t) => {
+      const sev = await agent(
+        severityPrompt(`${CAND_DIR}/${t.candidateId}.json`),
+        { label: `sev:${t.candidateId}`, phase: 'Verify', schema: SEVERITY_SCHEMA }
+      )
+      if (sev && sev.severity < 5) {
+        log(`[Fast Filter] ${t.file}:${t.function} severity is ${sev.severity}/10 (below 5). Skipping verification.`)
+        return { target: t, skipped: true, severity: sev.severity, reason: sev.reason }
+      }
+      
+      const votes = await parallel([
+        () => agent(reachabilityPrompt(`${CAND_DIR}/${t.candidateId}.json`), { label: `reach:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
+        () => agent(guardPrompt(`${CAND_DIR}/${t.candidateId}.json`), { label: `guard:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
+        () => agent(exploitPrompt(`${CAND_DIR}/${t.candidateId}.json`), { label: `exploit:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
+      ])
+      return { target: t, skipped: false, votes: votes.filter(Boolean) }
+    },
+    // stage 2: triage + writeback
+    async (rv) => {
+      if (!rv) return null
+      const { target } = rv
+      let verdict, explanation, votes
+      if (rv.skipped) {
+        verdict = 'false_positive'
+        explanation = `Excluded — Security severity rated as ${rv.severity}/10 (below audit threshold 5).\nReason: ${rv.reason}`
+        votes = []
+      } else {
+        votes = rv.votes
+        verdict = triage(votes)
+        explanation = explain(verdict, votes)
+      }
       // write back to plan for EVERY duplicate that maps to this unique key
       const dupIds = pending
         .filter(p => `${p.file}:${p.function}:${p.cweId}` === `${target.file}:${target.function}:${target.cweId}`)

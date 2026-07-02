@@ -5,14 +5,14 @@ import re
 
 def get_source(symbol, project_path):
     cmd = ["codegraph", "node", "-p", project_path, symbol]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_path)
     if result.returncode == 0:
         return result.stdout
     return ""
 
 def get_callers(symbol, project_path):
     cmd = ["codegraph", "callers", "-p", project_path, "-l", "10", "-j", symbol]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_path)
     if result.returncode == 0:
         try:
             return json.loads(result.stdout).get("callers", [])

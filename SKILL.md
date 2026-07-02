@@ -48,9 +48,15 @@ node "$SKILL/workflows/verify_workflow.js" --plan "$SKILL/resources/audit_plan.j
 
 ---
 
-## 🛡️ Auditing Methodology Reference (三视角对抗验证)
+## 🛡️ Auditing Methodology Reference (安全评估与对抗验证)
 
-During candidate verification, the workflow spawns parallel subagents evaluating the target functions across three distinct perspectives with a default falsification stance (默认"证伪"立场):
+During candidate verification, the workflow employs a two-stage filtering process:
+
+### Stage 1: Fast Severity Filter (安全等级评估过滤)
+A single agent evaluates the potential security severity (1 to 10) of the candidate code based on its functionality (e.g., handles untrusted input vs. pure logging/debugging). If the rating is `< 5`, the candidate is immediately classified as `false_positive` (low severity, excluded) and skips the expensive verification stage.
+
+### Stage 2: Parallel Adversarial Referees (三视角对抗验证)
+If severity is `≥ 5`, the workflow spawns parallel subagents evaluating the target functions across three distinct perspectives with a default falsification stance (默认"证伪"立场):
 
 1. **Path Reachability (路径可达性)**:
    - Verify if the function is accessible from untrusted external inputs/interfaces (IPC, socket recv, public API).

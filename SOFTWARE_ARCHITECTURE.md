@@ -97,8 +97,9 @@
 - **流程**(§4):
   ```
   读 pending → 去重(barrier, file:function:cwe) → pipeline 每候选:
-    stageA 上下文补全(调 M2b)
-    stageB parallel 三视角裁判(可达/守卫/触发,默认证伪)
+    stageA  上下文补全(调 M2b)
+    stageB1 安全等级过滤(单 Agent 评估 1-10，<5 直接判定为 false_positive 并跳过验证)
+    stageB2 parallel 三视角裁判(仅对 severity >= 5，可达/守卫/触发，默认证伪)
   → 非对称阈值三桶归类 → 调 M4-Python 回写 verdict
   ```
 - **三桶阈值(§12 实测钉死,不可改为多数票)**:
@@ -163,6 +164,12 @@
 { "isReal": bool, "confidence": "high|medium|low",
   "lens": "reachability|guard|exploit",
   "reason": str, "attackPath": str /* 无则填"无" */ }
+```
+
+### 3.4 安全评级输出 schema (M4 stageB1, 新增)
+```jsonc
+{ "severity": number /* 1-10 整数 */,
+  "reason": str /* 简短的评分依据说明 */ }
 ```
 
 ---
