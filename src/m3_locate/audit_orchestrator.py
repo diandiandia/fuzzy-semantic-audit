@@ -9,7 +9,7 @@ import subprocess
 from src.common.lang_utils import markdown_tag, EXT_TO_LANG, all_source_extensions, DEFAULT_LANG
 
 # 技术栈预扫描规则外置到 resources/prescan_rules.json(P0 去硬编码),
-# 找不到文件时退回内置的 C/C++ 兜底集,保证脚本仍可运行。
+# 找不到文件时退回内置的通用多语言兜底集,保证脚本仍可运行。
 _PRESCAN_RULES_PATH = os.path.join(
     os.path.dirname(__file__), "..", "..", "resources", "prescan_rules.json"
 )
