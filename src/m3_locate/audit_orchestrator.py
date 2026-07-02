@@ -6,29 +6,34 @@ import os
 import re
 import subprocess
 
-# Simple mapping of pre-scan filters
-PRE_SCAN_KEYWORDS = {
-    # Concurrency CWEs
-    "concurrency": {
-        "patterns": [r"pthread", r"std::mutex", r"std::thread", r"std::lock", r"synchronized", r"Runnable", r"volatile", r"sem_wait"],
-        "cwes": ["362", "413", "543", "567", "662", "663", "820", "821", "833", "1038", "1058"]
-    },
-    # Socket / Network CWEs
-    "network": {
-        "patterns": [r"socket", r"bind", r"connect", r"accept", r"recv", r"send", r"ServerSocket", r"DatagramPacket", r"TCP", r"UDP", r"IPPROTO"],
-        "cwes": ["252", "295", "406", "601", "611", "918", "1007"]
-    },
-    # Memory Management CWEs (mostly C/C++)
+from src.common.lang_utils import markdown_tag, EXT_TO_LANG, all_source_extensions, DEFAULT_LANG
+
+# 技术栈预扫描规则外置到 resources/prescan_rules.json(P0 去硬编码),
+# 找不到文件时退回内置的 C/C++ 兜底集,保证脚本仍可运行。
+_PRESCAN_RULES_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "..", "resources", "prescan_rules.json"
+)
+_FALLBACK_PRESCAN = {
     "memory": {
-        "patterns": [r"malloc", r"free", r"calloc", r"realloc", r"memcpy", r"memmove", r"memset", r"delete", r"new\s", r"pointer", r"dereference"],
+        "patterns": [r"malloc", r"free", r"calloc", r"realloc", r"memcpy", r"memmove", r"memset", r"delete", r"new\s"],
         "cwes": ["119", "120", "121", "122", "125", "415", "416", "476", "787", "824"]
-    },
-    # Deserialization / Injection
-    "serialization": {
-        "patterns": [r"deserialize", r"unmarshal", r"ObjectInputStream", r"Jackson", r"Gson", r"json", r"xml", r"YAML", r"pickle"],
-        "cwes": ["502", "611", "917", "1024"]
     }
 }
+
+def load_prescan_keywords():
+    try:
+        with open(os.path.abspath(_PRESCAN_RULES_PATH), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # 去掉注释键(以 _ 开头),只保留真正的技术栈规则
+        return {k: v for k, v in data.items() if not k.startswith("_")}
+    except Exception as e:
+        print(f"Warning: failed to load prescan rules ({e}); using built-in fallback.", file=sys.stderr)
+        return dict(_FALLBACK_PRESCAN)
+
+PRE_SCAN_KEYWORDS = load_prescan_keywords()
+
+# 所有已知源文件扩展名(供预扫描 / 语言探测遍历复用)
+_SOURCE_EXTS = tuple(sorted(all_source_extensions()))
 
 def setup_args():
     parser = argparse.ArgumentParser(description="Audit Orchestrator & Plan Manager")
@@ -65,7 +70,7 @@ def perform_pre_scan(project_path):
             
         for file in files:
             # Only scan source files
-            if not file.endswith((".cpp", ".hpp", ".cc", ".c", ".h", ".java", ".py", ".go", ".js", ".ts")):
+            if not file.endswith(_SOURCE_EXTS):
                 continue
                 
             filepath = os.path.join(root_dir, file)
@@ -122,26 +127,19 @@ def check_codegraph_index(project_path):
         print("CodeGraph index verified and active.")
 
 def detect_language(project_path):
-    ext_counts = {"cpp": 0, "java": 0, "python": 0, "go": 0, "js": 0}
-    ext_map = {
-        ".cpp": "cpp", ".hpp": "cpp", ".cc": "cpp", ".c": "cpp", ".h": "cpp",
-        ".java": "java",
-        ".py": "python",
-        ".go": "go",
-        ".js": "js", ".ts": "js"
-    }
+    ext_counts = {}
     for root_dir, _, files in os.walk(project_path):
         if any(ignored in root_dir for ignored in [".git", ".codegraph", "build", "tests", "mock"]):
             continue
         for file in files:
             ext = os.path.splitext(file)[1].lower()
-            if ext in ext_map:
-                ext_counts[ext_map[ext]] += 1
-                
-    dominant = max(ext_counts, key=ext_counts.get)
-    if ext_counts[dominant] > 0:
-        return dominant
-    return "cpp"  # Default fallback
+            lang = EXT_TO_LANG.get(ext)
+            if lang:
+                ext_counts[lang] = ext_counts.get(lang, 0) + 1
+
+    if not ext_counts:
+        return DEFAULT_LANG
+    return max(ext_counts, key=ext_counts.get)
 
 def cmd_init(args):
     project_path = os.path.abspath(args.project)
@@ -198,7 +196,8 @@ def cmd_report(args):
         
     with open(args.plan, "r", encoding="utf-8") as f:
         plan = json.load(f)
-        
+
+    code_tag = markdown_tag(plan.get("target_language"))
     print(f"Compiling report from audit plan: {args.plan}")
     
     findings = []
@@ -244,11 +243,11 @@ def cmd_report(args):
             md.append(f"{cand.get('triage_explanation', 'No detailed explanation provided.')}")
             
             md.append(f"\n#### 🧩 Target Source Code Snippet")
-            md.append(f"```cpp\n{cand.get('code_snippet', '// Code snippet missing')}\n```")
-            
+            md.append(f"```{code_tag}\n{cand.get('code_snippet', '// Code snippet missing')}\n```")
+
             if cand.get("struct_definitions"):
                 md.append(f"\n#### 📦 Relevant Data Structure Definitions")
-                md.append(f"```cpp\n{cand.get('struct_definitions')}\n```")
+                md.append(f"```{code_tag}\n{cand.get('struct_definitions')}\n```")
                 
             md.append("\n---")
             

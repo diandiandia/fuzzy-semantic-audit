@@ -5,6 +5,8 @@ import subprocess
 import concurrent.futures
 import numpy as np
 
+from src.common.lang_utils import extensions_for
+
 # Use fastembed when running in the virtual environment
 try:
     from fastembed import TextEmbedding
@@ -57,13 +59,7 @@ def build_index(project_path, target_lang="cpp"):
         all_files = []
         
     # 2. Filter files
-    valid_exts = {
-        "cpp": {".c", ".h", ".cpp", ".hpp", ".cc"},
-        "java": {".java"},
-        "python": {".py"},
-        "go": {".go"},
-        "js": {".js", ".ts"}
-    }.get(target_lang.lower(), {".c", ".h", ".cpp", ".hpp", ".cc"})
+    valid_exts = extensions_for(target_lang)
     
     target_files = []
     for f in all_files:

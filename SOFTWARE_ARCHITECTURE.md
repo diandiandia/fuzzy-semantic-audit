@@ -151,6 +151,7 @@
   "file": "lib/bluetooth/sdp.c",
   "code_snippet": "...",
   "struct_definitions": "...",
+  "call_chain_context": "...",              // ★P1:上游callers+下游callees切片,供逻辑漏洞(越权/状态机/信任边界)跨函数推理
   "entrypoint": "调用者或 reachability_hint",
   "verdict": "pending|verified|needs_review|false_positive",  // ★新增 needs_review
   "triage_explanation": "",

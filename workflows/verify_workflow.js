@@ -79,34 +79,45 @@ Read the candidate package JSON at: ${pkgPath} (use the Read tool).
 Assess the potential security severity (1 to 10) of verifying this candidate function for a security vulnerability matching the specified CWE.
 Considerations:
 - High Severity (5-10): The function directly processes untrusted network packets, user input, cryptography, authentication, authorization, memory allocation/copy, or system commands.
-- Low Severity (1-4): The function is auxiliary code, such as logging, debugging, UI rendering, configuration loading, test helpers, or standard boilerplate.
+- ALSO High Severity (5-10) even with no memory ops: the function acts on a caller-supplied identifier to read/modify a resource (CRUD/handler/service accessing an object by id/key/path), performs a state transition (order/payment/session lifecycle), or gates access — these are prime logic-flaw (IDOR / state-bypass / missing-authz) surfaces that have NO syntactic signature. Do NOT rate these low just because they "look like plain business logic".
+- Low Severity (1-4): The function is auxiliary code with no security decision and no untrusted data: logging, debugging, UI rendering, static configuration loading, test helpers, or standard boilerplate.
 Return the required JSON containing 'severity' and 'reason'.`
 }
+const PKG_FIELDS = 'It contains cwe_id, cwe_name, file, function, code_snippet, struct_definitions, call_chain_context (upstream callers + downstream callees), and entrypoint_candidate.'
+const USE_CHAIN = 'IMPORTANT: reason over the call_chain_context, not just the single function — logic flaws live in the cross-function data flow.'
+
 function reachabilityPrompt(pkgPath) {
-  return `You are Referee 1 — PATH REACHABILITY.
-Read the candidate package JSON at: ${pkgPath} (use the Read tool). It contains cwe_id, cwe_name, file, function, code_snippet, struct_definitions, entrypoint_candidate.
-Default stance: FALSIFY reachability. Unless there is clear evidence this code path is reachable from an untrusted external surface (IPC handler, socket recv, syscall, public API), assume it is NOT reachable and set isReal=false.
+  return `You are Referee 1 — PATH REACHABILITY & TRUST BOUNDARY.
+Read the candidate package JSON at: ${pkgPath} (use the Read tool). ${PKG_FIELDS}
+${USE_CHAIN}
+Default stance: FALSIFY reachability. Unless there is clear evidence this code path is reachable from an untrusted external surface (IPC handler, socket recv, syscall, public/HTTP API, route handler), assume it is NOT reachable and set isReal=false.
 Rules:
-1. If the entrypoint/caller trail links to an external attack surface, isReal may be true.
-2. If the entrypoint is unknown, a unit test, or only a reachability hint of "low", assume NOT reachable (isReal=false).
+1. Use the UPSTREAM callers in call_chain_context: does any caller trace back to an external entry point? If yes, isReal may be true.
+2. Trust-boundary check: is data assumed internal-only actually reachable from an external caller per the chain? That itself is a finding.
+3. If the entrypoint is unknown, a unit test, or only a reachability hint of "low", assume NOT reachable (isReal=false).
 Return the required JSON. lens must be "reachability". attackPath = external-input-to-function path if reachable, else "None". missingEvidence = what context is missing, else "None".`
 }
 function guardPrompt(pkgPath) {
-  return `You are Referee 2 — GUARD VALIDITY.
-Read the candidate package JSON at: ${pkgPath} (use the Read tool).
-Default stance: FALSIFY guard bypass. Unless you can prove a guard is missing, wrong, or bypassable, assume guards are VALID and the bug is mitigated (isReal=false).
+  return `You are Referee 2 — GUARD VALIDITY & MISSING AUTHORIZATION.
+Read the candidate package JSON at: ${pkgPath} (use the Read tool). ${PKG_FIELDS}
+${USE_CHAIN}
+Default stance: FALSIFY. Unless you can prove a guard is missing, wrong, or bypassable ON THIS PATH, assume guards are VALID and the bug is mitigated (isReal=false).
 Rules:
-1. Identify bounds checks, size limits, auth checks, state assertions, locks present in the function.
-2. Only set isReal=true if a malicious input can concretely bypass them.
-Return the required JSON. lens must be "guard". attackPath = how to bypass if bypassable, else "None". missingEvidence = what context is missing, else "None".`
+1. Identify bounds checks, size limits, auth checks, state assertions, locks in the function AND its callers.
+2. Missing-authorization (BOLA/IDOR) lens: if the function acts on a caller-supplied id/key/path, verify an ownership/permission check exists ON THIS CALL PATH. A check existing elsewhere does NOT count. If none on-path, isReal=true.
+3. Only set isReal=true if a malicious input can concretely bypass, or if a required guard is provably absent on the reachable path.
+Return the required JSON. lens must be "guard". attackPath = how to bypass / what unauthorized access is possible, else "None". missingEvidence = what context is missing, else "None".`
 }
 function exploitPrompt(pkgPath) {
-  return `You are Referee 3 — CONTROL-FLOW EXPLOITABILITY.
-Read the candidate package JSON at: ${pkgPath} (use the Read tool).
-Default stance: FALSIFY exploitability. Unless you can trace a concrete control flow that triggers the CWE under untrusted input, assume NOT exploitable (isReal=false).
+  return `You are Referee 3 — EXPLOITABILITY (control flow, state machine, race).
+Read the candidate package JSON at: ${pkgPath} (use the Read tool). ${PKG_FIELDS}
+${USE_CHAIN}
+Default stance: FALSIFY exploitability. Unless you can trace a concrete control flow that triggers the flaw under untrusted input, assume NOT exploitable (isReal=false).
 Rules:
-1. Does the snippet actually contain the vulnerability logic matching the CWE?
-2. Trace tainted variables source→sink. Provide a concrete trigger sequence only if one exists.
+1. Does the snippet actually contain the vulnerability logic matching the CWE (memory corruption OR a logic flaw)?
+2. State-machine bypass: can a required prior step (payment/validation/auth) be skipped by calling this directly or reordering calls, given the upstream callers?
+3. TOCTOU/race: is there a check-then-use gap on shared/filesystem state that a concurrent attacker can win?
+4. Trace tainted variables source→sink across the chain. Provide a concrete trigger/step sequence ONLY if one exists.
 Return the required JSON. lens must be "exploit". attackPath = concrete step-by-step trigger, else "None". missingEvidence = what context is missing, else "None".`
 }
 

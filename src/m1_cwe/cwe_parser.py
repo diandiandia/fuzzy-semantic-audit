@@ -8,7 +8,7 @@ import os
 def setup_args():
     parser = argparse.ArgumentParser(description="CWE-699 XML Catalog Parser & Pruner")
     parser.add_argument("--cwe", required=True, help="Path to CWE XML file (e.g. 699.xml)")
-    parser.add_argument("--lang", choices=["cpp", "java", "python", "js"], default="cpp", help="Target codebase language")
+    parser.add_argument("--lang", choices=["cpp", "java", "python", "go", "js"], default="cpp", help="Target codebase language")
     parser.add_argument("--output", required=True, help="Output JSON path")
     return parser.parse_args()
 
@@ -17,6 +17,7 @@ def get_language_aliases(lang):
         "cpp": ["C++", "C", "Not Language-Specific", "Language-Independent"],
         "java": ["Java", "Not Language-Specific", "Language-Independent"],
         "python": ["Python", "Not Language-Specific", "Language-Independent"],
+        "go": ["Go", "Not Language-Specific", "Language-Independent"],
         "js": ["JavaScript", "Not Language-Specific", "Language-Independent"]
     }
     return mapping.get(lang, ["Not Language-Specific"])

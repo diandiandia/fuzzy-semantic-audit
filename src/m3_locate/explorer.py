@@ -7,8 +7,9 @@ import concurrent.futures
 import sys
 
 from src.common.plan_manager import load_plan, save_plan
+from src.common.lang_utils import extensions_for
 from src.m2_index import vector_index
-from src.m2_index.codegraph_wrapper import get_source, get_callers, reachability_hint
+from src.m2_index.codegraph_wrapper import get_source, get_callers, reachability_hint, build_call_chain_context
 
 BLACKLIST_FOLDERS = {"monitor", "tools", "client", "unit", "emulator", "test", "tests", "mock", "mocks", "benchmark", "benchmarks", "gtest"}
 
@@ -72,14 +73,7 @@ def extract_type_context(source_code, project_path):
 def is_boilerplate_or_test(file_path, func_name, code_snippet, target_lang):
     # 1. Extension check
     ext = os.path.splitext(file_path)[1].lower()
-    lang_exts = {
-        "cpp": {".cpp", ".hpp", ".cc", ".h", ".c"},
-        "java": {".java"},
-        "python": {".py"},
-        "go": {".go"},
-        "js": {".js", ".ts"}
-    }
-    valid_exts = lang_exts.get(target_lang.lower(), set())
+    valid_exts = extensions_for(target_lang)
     if valid_exts and ext not in valid_exts:
         return True
 
@@ -179,13 +173,18 @@ def process_task(task, project_path, target_lang, max_candidates):
             
         # Extract related struct definitions
         struct_defs = extract_type_context(details, project_path)
-        
+
+        # P1: 调用链切片 —— 逻辑漏洞(越权/状态机/信任边界)必须看跨函数数据流,
+        # 单函数看不出。拼上游 callers + 下游 callees 作为裁判的额外证据。
+        call_chain_context = build_call_chain_context(symbol_name, project_path)
+
         candidates.append({
             "id": f"cand-{cwe_id}-{len(candidates)+1}",
             "function": symbol_name,
             "file": file_path,
             "code_snippet": details,
             "struct_definitions": struct_defs,
+            "call_chain_context": call_chain_context,
             "entrypoint": entrypoint,
             "verdict": "pending",
             "triage_explanation": "",
@@ -274,6 +273,11 @@ def main():
             "3. Control-Flow Exploitability: Can input manipulation trigger logical failures (DoS, bypass, memory corruption)?\n"
             "4. Taint Analysis: Trace the flow of untrusted variables from source to sink. Does untrusted data reach critical logic operations without validation?\n"
             "5. Attack Surface Analysis: Verify if the entrypoint is exposed externally (e.g. public API, IPC, socket handler).\n\n"
+            "LOGIC-FLAW LENS (critical — these have NO syntactic signature; reason over the CALL CHAIN SLICE below, not just the single function):\n"
+            "6. Missing Authorization / BOLA-IDOR: Does the function act on a caller-supplied identifier (id/key/path) WITHOUT verifying the current principal owns or may access that object? An access check existing SOMEWHERE is not enough — it must be on THIS path.\n"
+            "7. State-Machine Bypass: Can a required prior step (payment, validation, authentication) be skipped by calling this directly, or by reordering calls, given the upstream callers?\n"
+            "8. TOCTOU / Race: Is there a check-then-use gap where the checked state can change before use (shared state, filesystem, unlocked critical section)?\n"
+            "9. Trust-Boundary Confusion: Is data that is trusted internally actually reachable from an external caller (per the call chain), i.e. an internal-only assumption exposed?\n\n"
         )
         instructions = f"{custom_prompt}\n\n---\n\n{base_instructions}" if custom_prompt else base_instructions
         
@@ -299,6 +303,7 @@ def main():
             "function": cand["function"],
             "code_snippet": cand["code_snippet"],
             "struct_definitions": cand.get("struct_definitions", ""),
+            "call_chain_context": cand.get("call_chain_context", ""),
             "entrypoint_candidate": cand.get("entrypoint", "unknown"),
             "recall_source": cand.get("recall_source", "unknown"),
             "instructions": instructions

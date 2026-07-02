@@ -3,6 +3,7 @@ import json
 import argparse
 import sys
 from src.common.plan_manager import load_plan
+from src.common.lang_utils import markdown_tag
 
 def setup_args():
     parser = argparse.ArgumentParser(description="Audit Report Compiler")
@@ -16,7 +17,8 @@ def main():
     output_path = args.output
     
     plan = load_plan(plan_path)
-    
+
+    code_tag = markdown_tag(plan.get("target_language"))
     print(f"Compiling three-bucket report from plan: {plan_path}")
     
     # Track statistics
@@ -88,12 +90,16 @@ def main():
                     if vote.get("attackPath") and vote.get("attackPath") != "None":
                         md.append(f"  - Attack Path: `{vote.get('attackPath')}`")
             
+            if cand.get("call_chain_context"):
+                md.append(f"\n#### 🔗 Call Chain Slice (cross-function data flow)")
+                md.append(f"```\n{cand.get('call_chain_context')}\n```")
+
             md.append(f"\n#### 🧩 Target Source Code Snippet")
-            md.append(f"```cpp\n{cand.get('code_snippet', '// Code snippet missing')}\n```")
-            
+            md.append(f"```{code_tag}\n{cand.get('code_snippet', '// Code snippet missing')}\n```")
+
             if cand.get("struct_definitions"):
                 md.append(f"\n#### 📦 Relevant Data Structure Definitions")
-                md.append(f"```cpp\n{cand.get('struct_definitions')}\n```")
+                md.append(f"```{code_tag}\n{cand.get('struct_definitions')}\n```")
             md.append("\n---")
             
     # Needs review section
@@ -119,9 +125,13 @@ def main():
                     md.append(f"  - Reason: {vote.get('reason')}")
                     if vote.get("missingEvidence") and vote.get("missingEvidence") != "None":
                         md.append(f"  - Missing Evidence: *{vote.get('missingEvidence')}*")
-                        
+
+            if cand.get("call_chain_context"):
+                md.append(f"\n#### 🔗 Call Chain Slice (cross-function data flow)")
+                md.append(f"```\n{cand.get('call_chain_context')}\n```")
+
             md.append(f"\n#### 🧩 Target Source Code Snippet")
-            md.append(f"```cpp\n{cand.get('code_snippet', '// Code snippet missing')}\n```")
+            md.append(f"```{code_tag}\n{cand.get('code_snippet', '// Code snippet missing')}\n```")
             md.append("\n---")
             
     # False positives appendix

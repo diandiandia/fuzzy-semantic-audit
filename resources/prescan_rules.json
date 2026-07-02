@@ -1,0 +1,27 @@
+{
+  "_comment": "技术栈预扫描规则:tag -> {patterns(正则), cwes(该技术栈缺席时可裁剪的 CWE)}。P0 外置,便于按语言/项目扩充,不必改代码。",
+  "concurrency": {
+    "patterns": ["pthread", "std::mutex", "std::thread", "std::lock", "synchronized", "Runnable", "volatile", "sem_wait", "sync\\.Mutex", "go func", "asyncio", "threading\\.", "Promise\\.all"],
+    "cwes": ["362", "413", "543", "567", "662", "663", "820", "821", "833", "1038", "1058"]
+  },
+  "network": {
+    "patterns": ["socket", "bind", "connect", "accept", "recv", "send", "ServerSocket", "DatagramPacket", "TCP", "UDP", "IPPROTO", "http\\.", "requests\\.", "fetch\\(", "net/http"],
+    "cwes": ["252", "295", "406", "601", "611", "918", "1007"]
+  },
+  "memory": {
+    "patterns": ["malloc", "free", "calloc", "realloc", "memcpy", "memmove", "memset", "delete", "new\\s", "pointer", "dereference", "unsafe\\.Pointer"],
+    "cwes": ["119", "120", "121", "122", "125", "415", "416", "476", "787", "824"]
+  },
+  "serialization": {
+    "patterns": ["deserialize", "unmarshal", "ObjectInputStream", "Jackson", "Gson", "json", "xml", "YAML", "pickle", "yaml\\.load", "JSON\\.parse", "Marshal"],
+    "cwes": ["502", "611", "917", "1024"]
+  },
+  "authz": {
+    "patterns": ["authorize", "permission", "hasRole", "@PreAuthorize", "isAdmin", "checkAccess", "req\\.user", "current_user", "@login_required", "findById", "@PathVariable", "req\\.params"],
+    "cwes": ["285", "639", "862", "863", "266", "306"]
+  },
+  "injection": {
+    "patterns": ["exec", "system", "eval", "Runtime\\.getRuntime", "subprocess", "os\\.system", "child_process", "Statement", "query\\(", "cursor\\.execute", "innerHTML"],
+    "cwes": ["77", "78", "79", "89", "90", "94"]
+  }
+}
