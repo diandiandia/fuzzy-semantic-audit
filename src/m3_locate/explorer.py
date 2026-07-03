@@ -11,7 +11,7 @@ from src.common.lang_utils import extensions_for, LANG_EXTENSIONS, DEFAULT_LANG
 from src.m2_index import vector_index
 from src.m2_index.codegraph_wrapper import get_source, get_callers, reachability_hint, build_call_chain_context
 
-BLACKLIST_FOLDERS = {"monitor", "tools", "client", "unit", "emulator", "test", "tests", "mock", "mocks", "benchmark", "benchmarks", "gtest"}
+BLACKLIST_FOLDERS = {"monitor", "tools", "client", "unit", "emulator", "test", "tests", "mock", "mocks", "benchmark", "benchmarks", "gtest", "migrations", "node_modules", "vendor", "dist"}
 
 # P2-a 召回补强:逻辑漏洞类 CWE(越权/授权/信任边界/会话/资源访问控制)。
 # 这些漏洞的本质是"缺失的检查",向量/关键词只召回"存在的坏代码",召不回"本该有却没有的校验"
@@ -185,25 +185,36 @@ def resource_access_recall(project_path, recalled_symbols, limit=40):
     return added
 
 
-def process_task(task, project_path, target_lang, max_candidates):
+def adaptive_vector_topk(index_size):
+    """按项目规模自适应向量召回宽度。
+
+    小项目(如 184 函数)用固定 top_k=30 会一次召回全项目 16% 的函数,多 intent×多 CWE
+    叠加后几乎扫全库 → 候选爆量、区分度被稀释(walle 实测 1880 候选 / 184 唯一函数)。
+    改为 top_k = clamp(index_size × 5%, 5, 30):大项目仍 30,小项目按比例收窄。
+    """
+    if index_size <= 0:
+        return 30
+    return max(5, min(30, round(index_size * 0.05)))
+
+def process_task(task, project_path, target_lang, max_candidates, vec_topk=30, vec_min_score=0.0):
     cwe_id = task["cwe_id"]
     cwe_name = task["cwe_name"]
     cwe_desc = task["description"]
-    
+
     search_intents = task.get("query_intents", [])
     if not search_intents:
         # Fallback to keywords
         keywords = re.findall(r"\b\w{4,}\b", cwe_name)
         search_intents = [" ".join(keywords[:3])]
         task["query_intents"] = search_intents
-        
+
     # Recall maps to track source
     recalled_symbols = {} # name -> {node, source}
-    
+
     for intent in search_intents:
         # A. Vector Road Recall
         try:
-            vector_results = vector_index.search(project_path, intent, top_k=30)
+            vector_results = vector_index.search(project_path, intent, top_k=vec_topk, min_score=vec_min_score)
             for r in vector_results:
                 name = r["name"]
                 if name not in recalled_symbols:
@@ -299,6 +310,8 @@ def main():
     parser.add_argument("--plan", required=True, help="Path to audit_plan.json")
     parser.add_argument("--project", required=True, help="Path to target project")
     parser.add_argument("--max-candidates", type=int, default=5, help="Max candidates per CWE task")
+    parser.add_argument("--vec-min-score", type=float, default=0.6,
+                        help="Cosine similarity floor for vector recall (drop below this; §11: real hits sit ~0.66-0.72)")
     parser.add_argument("--output-dir", help="Dir to dump candidate packages")
     args = parser.parse_args()
     
@@ -323,18 +336,24 @@ def main():
         
     plan["status"] = "exploring"
     tasks = plan.get("tasks", [])
-    
+
     output_dir = args.output_dir
     if not output_dir:
         output_dir = os.path.join(project_path, ".audit_temp", "pending_cands")
     os.makedirs(output_dir, exist_ok=True)
-    
+
+    # 按项目规模自适应向量召回宽度 + 相似度下限(P0 收紧,防小项目撒胡椒面)
+    idx_n = vector_index.index_size(project_path)
+    vec_topk = adaptive_vector_topk(idx_n)
+    vec_min_score = args.vec_min_score
+    print(f"Vector index has {idx_n} functions → adaptive top_k={vec_topk}, min_score={vec_min_score}")
+
     print(f"Exploring {len(tasks)} tasks using ThreadPoolExecutor...")
-    
+
     all_exported_cands = []
-    
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-        futures = {executor.submit(process_task, task, project_path, target_lang, args.max_candidates): task for task in tasks}
+        futures = {executor.submit(process_task, task, project_path, target_lang, args.max_candidates, vec_topk, vec_min_score): task for task in tasks}
         
         for future in concurrent.futures.as_completed(futures):
             try:
@@ -344,24 +363,73 @@ def main():
                 task = futures[future]
                 print(f"Error processing task CWE-{task['cwe_id']}: {e}", file=sys.stderr)
                 
-    # Save the updated plan with candidates
+    # 覆盖 plan["tasks"] 前先快照原始 CWE 任务(留其定制 prompt / name / desc 供 instructions 拼装)
+    tasks_snapshot = [dict(t) for t in plan.get("tasks", [])]
+
+    # ---- P0 去重前置:按 file:function 全局合并 ----
+    # 病根(walle 实测):process_task 每个 CWE 独立召回,同一函数被 376 个 CWE 反复命中,
+    # 落盘成 1880 个候选包(去重后仅 184 唯一函数,90% 重复)。这里在落盘前按 file:function
+    # 合并,一个函数只生成一个候选包,把它命中的多个 CWE 收进 matched_cwes 字段,验证时一次判定
+    # 覆盖全部相关 CWE。1880 → ~184,验证成本直接砍到 1/10。
+    dedup = {}  # (file, function) -> merged candidate dict
+    src_rank = {"resource": 0, "symbol": 1, "vector": 2, "both": 3}
+    for cand in all_exported_cands:
+        cwe_id = cand["id"].split("-")[1]
+        key = (cand["file"], cand["function"])
+        if key not in dedup:
+            merged = dict(cand)
+            merged["matched_cwes"] = []
+            dedup[key] = merged
+        m = dedup[key]
+        if cwe_id not in m["matched_cwes"]:
+            m["matched_cwes"].append(cwe_id)
+        # recall_source 合并:保留信息量最高的来源标签(both > vector > symbol > resource)
+        if src_rank.get(cand.get("recall_source"), -1) > src_rank.get(m.get("recall_source"), -1):
+            m["recall_source"] = cand["recall_source"]
+
+    unique_cands = list(dedup.values())
+    print(f"Dedup: {len(all_exported_cands)} raw candidates → {len(unique_cands)} unique (file:function).")
+
+    # plan 的 result_candidates 也换成去重后的列表(单独一个 task 承载,report/workflow 基于它),
+    # 避免 plan 里仍留 1880 条重复记录拖慢 discover 与回写。
+    for i, cand in enumerate(unique_cands, 1):
+        cand["id"] = f"cand-uniq-{i}"
+        # 给 plan 候选留一个代表 cwe_id(取 matched 首个),满足 workflow discover 的 schema
+        cand["cwe_id"] = cand.get("matched_cwes", ["MULTI"])[0] if cand.get("matched_cwes") else "MULTI"
+    plan["tasks"] = [{
+        "id": "task-deduped",
+        "type": "verify",
+        "cwe_id": "MULTI",
+        "cwe_name": "Deduplicated candidates (multi-CWE)",
+        "description": "Unique file:function candidates merged across all CWE recall roads.",
+        "query_intents": [],
+        "vulnerability_prompt": "",
+        "status": "explored",
+        "result_candidates": unique_cands,
+    }]
     plan["status"] = "explored"
     save_plan(plan_path, plan)
-    
-    # Export all pending candidates to package files
+
+    # 保留每个 CWE 的定制 prompt,供 instructions 按 matched_cwes 拼装
+    cwe_prompt = {t["cwe_id"]: t.get("vulnerability_prompt", "") for t in tasks_snapshot}
+    cwe_name_map = {t["cwe_id"]: t.get("cwe_name", "") for t in tasks_snapshot}
+    cwe_desc_map = {t["cwe_id"]: t.get("description", "") for t in tasks_snapshot}
+
+    # Export all deduped candidates to package files
     exported_count = 0
-    for cand in all_exported_cands:
-        # Find task associated with candidate
-        cwe_id = cand["id"].split("-")[1]
-        task = next((t for t in plan["tasks"] if t["cwe_id"] == cwe_id), None)
-        if not task:
-            continue
-            
-        custom_prompt = task.get("vulnerability_prompt", "")
+    for cand in unique_cands:
+        matched = cand.get("matched_cwes", [])
+        cwe_list_str = ", ".join(f"CWE-{c}" for c in matched) or "the relevant CWEs"
+        # 收集这些 CWE 的定制 prompt(去空、去重)
+        custom_prompts = [cwe_prompt.get(c, "") for c in matched if cwe_prompt.get(c)]
+        custom_prompt = "\n\n".join(dict.fromkeys(custom_prompts))
+        cwe_id = matched[0] if matched else "UNKNOWN"
+
         base_instructions = (
             "You are an expert security auditor. Perform an audit using advanced code auditing methods: "
             f"Trifecta Proof (三点静态反证法), Taint Analysis (污点分析), and Attack Surface Analysis (攻击面分析) "
-            f"to determine if the candidate function contains a real, explicit, and verified logical vulnerability matching CWE-{cwe_id}.\n\n"
+            f"to determine if the candidate function contains a real, explicit, and verified logical vulnerability "
+            f"matching ANY of these weaknesses: {cwe_list_str}.\n\n"
             "CRITICAL GUIDELINES:\n"
             "1. Keep false positives to a strict minimum. Assume developers have implemented basic safety wrappers and check conditions unless you can prove a concrete, realistic exploit path.\n"
             "2. DO NOT flag theoretical, potential, or speculative risks (e.g., 'potential deadlock risk' without a concrete, reachable, and exploitable sequence) as 'verified'. These must be classified as 'false_positive'.\n"
@@ -397,8 +465,9 @@ def main():
         pkg = {
             "candidate_id": cand["id"],
             "cwe_id": cwe_id,
-            "cwe_name": task["cwe_name"],
-            "cwe_description": task["description"],
+            "matched_cwes": matched,
+            "cwe_name": "; ".join(f"CWE-{c}: {cwe_name_map.get(c, '')}" for c in matched),
+            "cwe_description": "\n".join(f"CWE-{c}: {cwe_desc_map.get(c, '')}" for c in matched),
             "file": cand["file"],
             "function": cand["function"],
             "code_snippet": cand["code_snippet"],

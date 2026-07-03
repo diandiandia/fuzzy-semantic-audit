@@ -17,7 +17,7 @@ VEC_INDEX_DIR = ".audit_temp/vec_index"
 METADATA_FILE = "metadata.json"
 VECTORS_FILE = "vectors.npy"
 
-BLACKLIST_FOLDERS = {"monitor", "tools", "client", "unit", "emulator", "test", "tests", "mock", "mocks", "benchmark", "benchmarks", "gtest"}
+BLACKLIST_FOLDERS = {"monitor", "tools", "client", "unit", "emulator", "test", "tests", "mock", "mocks", "benchmark", "benchmarks", "gtest", "migrations", "node_modules", "vendor", "dist"}
 
 def clean_code_block(markdown_text):
     # Extracts code block, removes line numbers
@@ -168,42 +168,62 @@ def build_index(project_path, target_lang="cpp"):
     print(f"Vector index built successfully. Saved to {out_dir}")
     return True
 
-def search(project_path, intent, top_k=30):
+def index_size(project_path):
+    """返回索引里的函数总数(供 explorer 按项目规模自适应 top_k)。索引缺失返回 0。"""
+    project_path = os.path.abspath(project_path)
+    meta_path = os.path.join(project_path, VEC_INDEX_DIR, METADATA_FILE)
+    if not os.path.exists(meta_path):
+        return 0
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            return len(json.load(f))
+    except Exception:
+        return 0
+
+def search(project_path, intent, top_k=30, min_score=0.0):
+    """语义检索。top_k 上限 + min_score 相似度下限双闸门。
+
+    min_score 用于小项目防"撒胡椒面":cosine 低于阈值的命中(语义其实不相关,只是
+    项目函数少被迫凑数)直接丢弃,避免召回全项目大比例函数稀释区分度(§11 实测区分度低)。
+    """
     if not TextEmbedding:
         raise ImportError("fastembed is not available in the current environment.")
-        
+
     project_path = os.path.abspath(project_path)
     out_dir = os.path.join(project_path, VEC_INDEX_DIR)
     meta_path = os.path.join(out_dir, METADATA_FILE)
     vec_path = os.path.join(out_dir, VECTORS_FILE)
-    
+
     if not os.path.exists(meta_path) or not os.path.exists(vec_path):
         print("Vector index not found. Building index first...")
         build_index(project_path)
         if not os.path.exists(meta_path) or not os.path.exists(vec_path):
             return []
-            
+
     with open(meta_path, "r", encoding="utf-8") as f:
         metadata = json.load(f)
     vectors = np.load(vec_path)
-    
+
     model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
     ivec = np.array(list(model.embed([intent])))[0]
-    
+
     # Calculate cosine similarities
     norms = np.linalg.norm(vectors, axis=1) * np.linalg.norm(ivec) + 1e-9
     sims = vectors @ ivec / norms
-    
+
     top_indices = np.argsort(-sims)[:top_k]
-    
+
     results = []
     for idx in top_indices:
+        score = float(sims[idx])
+        if score < min_score:
+            continue  # 相似度下限闸门:低于阈值不算命中
         meta = metadata[idx]
         results.append({
             "name": meta["name"],
             "file": meta["file"],
             "line": meta["line"],
-            "score": float(sims[idx])
+            "score": score
         })
     return results
 

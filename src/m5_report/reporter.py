@@ -11,6 +11,13 @@ def setup_args():
     parser.add_argument("--output", required=True, help="Output markdown report path")
     return parser.parse_args()
 
+def cwe_label(task, cand):
+    """去重后一个候选可命中多个 CWE:优先用候选的 matched_cwes,回退到 task 的单 CWE。"""
+    matched = cand.get("matched_cwes")
+    if matched:
+        return "CWE-" + " / CWE-".join(matched)
+    return f"CWE-{task.get('cwe_id', '?')}: {task.get('cwe_name', '')}"
+
 def compile_report(plan_path, output_path):
     plan = load_plan(plan_path)
 
@@ -68,7 +75,7 @@ def compile_report(plan_path, output_path):
         md.append("🎉 **No logic vulnerabilities verified in this run.**")
     else:
         for i, (task, cand) in enumerate(verified, 1):
-            md.append(f"\n### {i}. CWE-{task['cwe_id']}: {task['cwe_name']}")
+            md.append(f"\n### {i}. {cwe_label(task, cand)}")
             md.append(f"- **File Location**: `file://{cand['file']}`")
             md.append(f"- **Target Function**: `{cand['function']}`")
             md.append(f"- **Reachability Entrypoint**: `{cand.get('entrypoint', 'N/A')}`")
@@ -104,7 +111,7 @@ def compile_report(plan_path, output_path):
         md.append("No candidates required manual review.")
     else:
         for i, (task, cand) in enumerate(needs_review, 1):
-            md.append(f"\n### {i}. CWE-{task['cwe_id']}: {task['cwe_name']}")
+            md.append(f"\n### {i}. {cwe_label(task, cand)}")
             md.append(f"- **File Location**: `file://{cand['file']}`")
             md.append(f"- **Target Function**: `{cand['function']}`")
             md.append(f"- **Reachability Entrypoint**: `{cand.get('entrypoint', 'N/A')}`")
@@ -136,7 +143,7 @@ def compile_report(plan_path, output_path):
         md.append("No false positives were dismissed in this run.")
     else:
         for i, (task, cand) in enumerate(false_positive, 1):
-            md.append(f"\n### {i}. CWE-{task['cwe_id']}: {task['cwe_name']} (Function: `{cand['function']}`)")
+            md.append(f"\n### {i}. {cwe_label(task, cand)} (Function: `{cand['function']}`)")
             md.append(f"- **File Location**: `file://{cand['file']}`")
             md.append(f"- **Recall Source**: `{cand.get('recall_source', 'unknown')}`")
             md.append(f"- **Dismissal Explanation**: {cand.get('triage_explanation', 'No detailed explanation provided.')}")

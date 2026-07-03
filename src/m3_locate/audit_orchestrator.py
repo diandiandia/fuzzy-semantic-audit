@@ -51,6 +51,21 @@ PRE_SCAN_KEYWORDS = load_prescan_keywords()
 # 所有已知源文件扩展名(供预扫描 / 语言探测遍历复用)
 _SOURCE_EXTS = tuple(sorted(all_source_extensions()))
 
+# 预扫描 / 语言探测时忽略的目录:VCS、索引、构建产物、依赖、前端打包目录、测试。
+# 实测教训(walle):不忽略 fe/dist 会把 webpack 打包的 vendor.*.js(第三方库 minified)
+# 扫进来 → 技术栈误判(什么都命中)、语言误判(前端 js 盖过后端 py)。
+_IGNORE_DIRS = (".git", ".codegraph", "build", "dist", "node_modules",
+                "vendor", "tests", "test", "mock", "__pycache__", ".venv", "venv")
+
+def _is_ignored_dir(root_dir):
+    parts = root_dir.replace("\\", "/").split("/")
+    return any(p in _IGNORE_DIRS for p in parts)
+
+def _is_generated_file(filename):
+    # minified / source-map / 打包产物:纯噪声,跳过
+    low = filename.lower()
+    return low.endswith((".min.js", ".min.css", ".map", ".bundle.js")) or ".min." in low
+
 def setup_args():
     parser = argparse.ArgumentParser(description="Audit Orchestrator & Plan Manager")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -80,13 +95,12 @@ def perform_pre_scan(project_path):
         
     # Walk the directory
     for root_dir, _, files in os.walk(project_path):
-        # Ignore git and standard ignores
-        if any(ignored in root_dir for ignored in [".git", ".codegraph", "build", "tests", "mock"]):
+        if _is_ignored_dir(root_dir):
             continue
-            
+
         for file in files:
-            # Only scan source files
-            if not file.endswith(_SOURCE_EXTS):
+            # Only scan source files; skip generated/minified bundles
+            if not file.endswith(_SOURCE_EXTS) or _is_generated_file(file):
                 continue
                 
             filepath = os.path.join(root_dir, file)
@@ -145,9 +159,11 @@ def check_codegraph_index(project_path):
 def detect_language(project_path):
     ext_counts = {}
     for root_dir, _, files in os.walk(project_path):
-        if any(ignored in root_dir for ignored in [".git", ".codegraph", "build", "tests", "mock"]):
+        if _is_ignored_dir(root_dir):
             continue
         for file in files:
+            if _is_generated_file(file):
+                continue
             ext = os.path.splitext(file)[1].lower()
             lang = EXT_TO_LANG.get(ext)
             if lang:
