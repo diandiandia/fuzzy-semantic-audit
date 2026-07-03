@@ -90,7 +90,7 @@ verdict:false_positive(误报):   11
 | `explorer.py` | CodeGraph 定位候选 | **加双路召回**(见 3.2) |
 | `trifecta_verifier.py export` | 剪枝导出候选包 | 保留 |
 | `trifecta_verifier.py update` | **回写 verdict** | **改:见 §4.3 三桶** |
-| `audit_orchestrator.py report` | 出 Markdown 报告 | **改:见 §4.3 三桶** |
+| `m5_report/reporter.py` | 出三桶 Markdown 报告(`audit_orchestrator.py report` 委托至此) | **改:见 §4.3 三桶** |
 
 ### L3 方法论层 (Skill)
 
@@ -216,7 +216,7 @@ verdict:false_positive(误报):   11
 **P1 — 验证层(§10 实测:Workflow 强制遍历已验证通过)**
 5. **[新增·P1]** `verify_workflow` —— L4 Workflow 脚本(§4 核心)。**8/8 强制遍历实测通过**。
 6. **[改·P1]** `trifecta_verifier.py` —— 支持 `needs_review` 第三 verdict。
-7. **[改·P1]** `audit_orchestrator.py report` —— 渲染三桶报告。
+7. **[改·P1]** 三桶报告 —— 实现落在 `m5_report/reporter.py`;`audit_orchestrator.py report` 改为委托入口(消除旧的两桶实现与三桶设计的漂移)。
 8. **[改·P1]** 验证裁判证据源 —— 用 `codegraph node`(源码+trail)+ **文件路径粗可达性分流**,不依赖 `callers`(§10 实测其常只到"文件:1"级)。
 9. **[改·P1]** `SKILL.md` —— 删人肉分批协议,Step 7 改为拉起 Workflow。
 

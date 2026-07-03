@@ -6,7 +6,7 @@ import os
 import re
 import subprocess
 
-from src.common.lang_utils import markdown_tag, EXT_TO_LANG, all_source_extensions, DEFAULT_LANG
+from src.common.lang_utils import EXT_TO_LANG, all_source_extensions, DEFAULT_LANG
 
 # 技术栈预扫描规则外置到 resources/prescan_rules.json(P0 去硬编码),
 # 找不到文件时退回内置的通用多语言兜底集,保证脚本仍可运行。
@@ -206,70 +206,11 @@ def cmd_init(args):
     print(f"Initialized audit plan with {len(plan['tasks'])} tasks. Saved to: {args.output}")
 
 def cmd_report(args):
-    if not os.path.exists(args.plan):
-        print(f"Error: Plan file {args.plan} does not exist", file=sys.stderr)
-        sys.exit(1)
-        
-    with open(args.plan, "r", encoding="utf-8") as f:
-        plan = json.load(f)
-
-    code_tag = markdown_tag(plan.get("target_language"))
-    print(f"Compiling report from audit plan: {args.plan}")
-    
-    findings = []
-    total_candidates = 0
-    false_positives = 0
-    verified_vulnerabilities = 0
-    
-    for task in plan["tasks"]:
-        for candidate in task.get("result_candidates", []):
-            total_candidates += 1
-            verdict = candidate.get("verdict")
-            if verdict == "verified":
-                verified_vulnerabilities += 1
-                findings.append((task, candidate))
-            elif verdict == "false_positive":
-                false_positives += 1
-                
-    # Create Markdown report
-    md = []
-    md.append(f"# 🛡️ Code Security Audit Report: Fuzzy Semantic Audit Findings")
-    md.append(f"\n- **Target Project**: `{plan.get('project_path')}`")
-    md.append(f"- **Language**: `{plan.get('target_language')}`")
-    md.append(f"- **Audit Status**: `{plan.get('status')}`")
-    md.append(f"\n## 📊 Summary of Audit Run")
-    md.append(f"| Metric | Count |")
-    md.append(f"| :--- | :--- |")
-    md.append(f"| Total CWE Weaknesses Scanned | {len(plan.get('tasks', []))} |")
-    md.append(f"| Total Code Candidates Located | {total_candidates} |")
-    md.append(f"| False Positives Dismissed | {false_positives} |")
-    md.append(f"| **Verified Logic Vulnerabilities (0-Days)** | **{verified_vulnerabilities}** |")
-    
-    if verified_vulnerabilities == 0:
-        md.append("\n🎉 **No logic vulnerabilities verified in this run.**")
-    else:
-        md.append("\n## 🚨 Detailed Vulnerability Records")
-        for i, (task, cand) in enumerate(findings, 1):
-            md.append(f"\n### {i}. [{cand['verdict'].upper()}] CWE-{task['cwe_id']}: {task['cwe_name']}")
-            md.append(f"- **File Location**: `file://{cand['file']}`")
-            md.append(f"- **Target Function**: `{cand['function']}`")
-            md.append(f"- **Reachability Entrypoint**: `{cand.get('entrypoint', 'N/A')}`")
-            
-            md.append(f"\n#### 🔍 Vulnerability Explanation")
-            md.append(f"{cand.get('triage_explanation', 'No detailed explanation provided.')}")
-            
-            md.append(f"\n#### 🧩 Target Source Code Snippet")
-            md.append(f"```{code_tag}\n{cand.get('code_snippet', '// Code snippet missing')}\n```")
-
-            if cand.get("struct_definitions"):
-                md.append(f"\n#### 📦 Relevant Data Structure Definitions")
-                md.append(f"```{code_tag}\n{cand.get('struct_definitions')}\n```")
-                
-            md.append("\n---")
-            
-    with open(args.output, "w", encoding="utf-8") as f:
-        f.write("\n".join(md))
-    print(f"Report compiled successfully. Saved to: {args.output}")
+    # 三桶报告的唯一实现在 m5_report.reporter(verified / needs_review / false_positive)。
+    # orchestrator 的 report 子命令保留为兼容入口,直接委托给 reporter,避免维护两份
+    # 且防止旧的两桶实现与 §13 三桶设计漂移(此前它只渲染 verified/false_positive)。
+    from src.m5_report import reporter
+    reporter.compile_report(args.plan, args.output)
 
 def main():
     args = setup_args()

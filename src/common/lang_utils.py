@@ -47,11 +47,16 @@ def markdown_tag(target_lang):
 
 
 def extensions_for(target_lang):
-    """返回给定语言的源文件扩展名集合;未知语言退回 C/C++ 集合作为兜底。"""
+    """返回给定语言的源文件扩展名集合。
+
+    未知语言返回**空集**(而非静默退回 C/C++)——空集让上游的扩展名过滤自动放行
+    所有文件(见 explorer.is_boilerplate_or_test),即"未知语言时不按扩展名裁剪",
+    这比"把非 C 文件默默按 C 规则裁掉"更符合通用多语言语义。上游据此可自行告警。
+    """
     lang = (target_lang or "").lower()
     if lang in ("typescript", "ts", "javascript"):
         lang = "js"
-    return LANG_EXTENSIONS.get(lang, LANG_EXTENSIONS[DEFAULT_LANG])
+    return LANG_EXTENSIONS.get(lang, set())
 
 
 def all_source_extensions():

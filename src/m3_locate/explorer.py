@@ -7,7 +7,7 @@ import concurrent.futures
 import sys
 
 from src.common.plan_manager import load_plan, save_plan
-from src.common.lang_utils import extensions_for
+from src.common.lang_utils import extensions_for, LANG_EXTENSIONS, DEFAULT_LANG
 from src.m2_index import vector_index
 from src.m2_index.codegraph_wrapper import get_source, get_callers, reachability_hint, build_call_chain_context
 
@@ -57,36 +57,69 @@ def run_codegraph_query(query, project_path):
     except Exception:
         return []
 
-def extract_type_context(source_code, project_path):
-    types_to_find = set()
-    
-    # 1. CamelCase/Uppercase words
-    words_camel = re.findall(r"\b[A-Z][a-zA-Z0-9_]+\b", source_code)
-    types_to_find.update(words_camel)
-    
-    # 2. snake_case ending with _t
-    words_t = re.findall(r"\b[a-z0-9_]+_t\b", source_code)
-    types_to_find.update(words_t)
-    
-    # 3. struct/class/enum declarations
-    declarations = re.findall(r"\b(?:struct|class|enum)\s+([a-zA-Z0-9_]+)\b", source_code)
-    types_to_find.update(declarations)
-    
-    # Filter out common programming keywords
-    ignored = {"const", "void", "int", "char", "float", "double", "bool", "std", "string", "vector", "map", "list", "set", "shared_ptr", "unique_ptr", "struct", "class", "enum", "unsigned", "long", "short", "return", "sizeof"}
-    types_to_find = {t for t in types_to_find if t not in ignored}
-            
+# 按语言的类型/结构名提取策略。目标:从函数源码里挑出"值得回查定义的类型名",
+# 再用 codegraph 拉其定义作为裁判的结构上下文。C/C++ 特化的 `_t`/struct 正则对
+# Python/Go/JS 无意义,故按语言分派;未知语言返回空集(不提取,避免噪声)。
+_TYPE_KIND_BY_LANG = {
+    "cpp": ["struct", "class", "enum", "union", "typedef"],
+    "c": ["struct", "enum", "union", "typedef"],
+    "java": ["class", "interface", "enum", "record"],
+    "go": ["struct", "interface", "type"],
+    "python": ["class"],
+    "js": ["class", "interface", "type"],
+}
+
+# 各语言都会命中的通用关键字/内建类型噪声,统一过滤。
+_IGNORED_TYPE_NAMES = {
+    "const", "void", "int", "char", "float", "double", "bool", "std", "string",
+    "vector", "map", "list", "set", "shared_ptr", "unique_ptr", "struct", "class",
+    "enum", "unsigned", "long", "short", "return", "sizeof", "interface", "type",
+    "record", "union", "typedef", "String", "Integer", "Boolean", "Object", "None",
+    "True", "False", "self", "error", "nil",
+}
+
+def _candidate_type_names(source_code, target_lang):
+    """按语言从源码里挑出候选类型名。"""
+    lang = (target_lang or "").lower()
+    if lang in ("typescript", "ts", "javascript"):
+        lang = "js"
+    names = set()
+
+    # CamelCase 标识符对多数语言都是类型/类名的强信号(Java/Go/JS/C++ 通用)。
+    if lang in ("cpp", "c", "java", "go", "js", "python"):
+        names.update(re.findall(r"\b[A-Z][a-zA-Z0-9_]+\b", source_code))
+
+    # C/C++ 专属:snake_case 的 `_t` 类型别名。
+    if lang in ("cpp", "c"):
+        names.update(re.findall(r"\b[a-z0-9_]+_t\b", source_code))
+
+    # 各语言的声明关键字后紧跟的名字(struct/class/interface/type/record ...)。
+    kinds = _TYPE_KIND_BY_LANG.get(lang)
+    if kinds:
+        kw = "|".join(kinds)
+        names.update(re.findall(rf"\b(?:{kw})\s+([A-Za-z_][A-Za-z0-9_]*)\b", source_code))
+
+    return {n for n in names if n not in _IGNORED_TYPE_NAMES}
+
+def extract_type_context(source_code, project_path, target_lang):
+    types_to_find = _candidate_type_names(source_code, target_lang)
+    if not types_to_find:
+        return ""
+
+    # codegraph node 的 kind 命名跨语言不完全一致,用一个宽集合放行。
+    struct_kinds = {"struct", "class", "enum", "union", "interface", "record", "type", "typedef"}
+
     struct_defs = []
-    for t in sorted(list(types_to_find))[:8]: # Limit to first 8 types
+    for t in sorted(types_to_find)[:8]:  # Limit to first 8 types
         q_res = run_codegraph_query(t, project_path)
         for entry in q_res:
             node = entry.get("node", {})
-            if node.get("kind") in ["struct", "class", "enum"]:
+            if node.get("kind") in struct_kinds:
                 node_detail = get_source(node["name"], project_path)
                 if node_detail:
                     struct_defs.append(f"// Definition for {node['kind']} {node['name']}\n{node_detail}")
                     break
-                    
+
     return "\n\n".join(struct_defs)
 
 def is_boilerplate_or_test(file_path, func_name, code_snippet, target_lang):
@@ -233,8 +266,8 @@ def process_task(task, project_path, target_lang, max_candidates):
         else:
             entrypoint = f"Reachability Hint: {hint}"
             
-        # Extract related struct definitions
-        struct_defs = extract_type_context(details, project_path)
+        # Extract related struct definitions (language-aware)
+        struct_defs = extract_type_context(details, project_path, target_lang)
 
         # P1: 调用链切片 —— 逻辑漏洞(越权/状态机/信任边界)必须看跨函数数据流,
         # 单函数看不出。拼上游 callers + 下游 callees 作为裁判的额外证据。
@@ -275,7 +308,12 @@ def main():
     check_codegraph_index(project_path)
     
     plan = load_plan(plan_path)
-    target_lang = plan.get("target_language", "cpp")
+    target_lang = plan.get("target_language") or DEFAULT_LANG
+    # 通用多语言告警:若 plan 的语言不在已知集合里,扩展名过滤会放行所有文件
+    # (extensions_for 返回空集),此处显式提示而非静默按 C 处理。
+    if target_lang.lower() not in LANG_EXTENSIONS and target_lang.lower() not in ("typescript", "ts", "javascript"):
+        print(f"[!] Unknown target_language '{target_lang}': extension-based pruning disabled "
+              f"(all files pass extension filter). Consider adding it to lang_utils.LANG_EXTENSIONS.", file=sys.stderr)
     
     # 1. Trigger Vector Index build if not exists
     vec_dir = os.path.join(project_path, vector_index.VEC_INDEX_DIR)

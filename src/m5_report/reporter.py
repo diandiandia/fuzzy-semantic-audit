@@ -11,11 +11,7 @@ def setup_args():
     parser.add_argument("--output", required=True, help="Output markdown report path")
     return parser.parse_args()
 
-def main():
-    args = setup_args()
-    plan_path = args.plan
-    output_path = args.output
-    
+def compile_report(plan_path, output_path):
     plan = load_plan(plan_path)
 
     code_tag = markdown_tag(plan.get("target_language"))
@@ -148,8 +144,12 @@ def main():
     # Write report
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(md))
-        
+
     print(f"Report compiled successfully. Saved to: {output_path}")
+
+def main():
+    args = setup_args()
+    compile_report(args.plan, args.output)
 
 if __name__ == "__main__":
     main()

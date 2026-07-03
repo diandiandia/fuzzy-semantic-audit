@@ -120,8 +120,8 @@
 
 ### M5 — 报告模块 [改:三桶]
 - **职责**:读 plan → 渲染三桶 Markdown 报告。
-- **来源**:`audit_orchestrator.py report`
-- **改动**:现只渲染 verified → 改为**三桶都渲染**(确认主体 / 待人工区 / 已排除附录)+ 记录 budget 截断/未跑项(§7 诚实边界)。
+- **来源**:`m5_report/reporter.py`(三桶实现的唯一落点;`audit_orchestrator.py report` 仅作兼容入口,直接委托 `reporter.compile_report`,不再自带过时的两桶实现)。
+- **改动**:三桶都渲染(确认主体 / 待人工区 / 已排除附录)+ 记录 budget 截断/未跑项(§7 诚实边界);代码块标签随 `target_language` 动态化(`lang_utils.markdown_tag`,不再硬编码 cpp)。
 
 ### M6 — intent 生成 [改:修复]
 - **职责**:为每个 CWE 任务生成**真语义** query_intents + vulnerability_prompt。
