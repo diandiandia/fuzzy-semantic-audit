@@ -11,7 +11,7 @@
 - **Skill 根目录**：`/home/zjamg/test_project_code_audit/fuzzy-semantic-audit`
 - **目标项目**：`/home/zjamg/walle-web`（Flask / Python 后端，217 个索引函数，含 `walle/service/rbac/` 授权模块）
 - **隔离解释器**：`/home/zjamg/test_project_code_audit/fuzzy-semantic-audit/.venv-embed/bin/python`（fastembed 装在这里；本测试的验证阶段不做向量检索，Python 步骤用它或系统 python3 皆可）
-- **候选包目录**：`/home/zjamg/walle-web/.audit_temp/pending_cands/`（**21 个** `cand-uniq-*.json`，全部 `verdict=pending`）
+- **候选包目录**：`/home/zjamg/walle-web/.audit_workspace/pending_cands/`（**21 个** `cand-uniq-*.json`，全部 `verdict=pending`）
 - **audit_plan.json**：`.../resources/audit_plan.json`（`status=explored`，单个 deduped task，21 个候选，已裁剪到越权/认证类 6 个 CWE：306/419/425/601/639/749）
 - **验证 workflow**：`.../workflows/verify_workflow.js`
 - **回写 CLI**：`python -m src.m4_verify.trifecta_verifier update`
@@ -37,7 +37,7 @@
   ```json
   {
     "planPath": "/home/zjamg/test_project_code_audit/fuzzy-semantic-audit/resources/audit_plan.json",
-    "candDir": "/home/zjamg/walle-web/.audit_temp/pending_cands",
+    "candDir": "/home/zjamg/walle-web/.audit_workspace/pending_cands",
     "projectPath": "/home/zjamg/walle-web",
     "repoRoot": "/home/zjamg/test_project_code_audit/fuzzy-semantic-audit",
     "venvPython": "/home/zjamg/test_project_code_audit/fuzzy-semantic-audit/.venv-embed/bin/python",

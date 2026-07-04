@@ -380,3 +380,61 @@ audit_report.md
   3. 候选池会因粗召回膨胀 → 依赖 P1 severity filter + 目录过滤兜底,试点须实测膨胀倍数与单位成本。
 
 **总体**:P0/P1 补齐了"通用"与"能判逻辑漏洞"两块名实差距;P2-a 补召回端但仍是词法级,自由探索探针(P2-b 重构)与验证层串行证伪链(成本优化)留待数据驱动决策,未纳入本次。
+
+---
+
+## 14. walle-web 真实试点 + 后续改造(2026-07-03/04)
+
+在 `/home/zjamg/walle-web`(Flask/Python 后端,217 索引函数,含 rbac 授权模块)跑了一轮真实试点,并据其暴露的问题做了三轮改造。**这是第一个非 C 真实项目的端到端数据**,补齐了 §9-§13 只测过 C(bluez)的空白。
+
+### 14.1 试点暴露的真问题(与出发假设不同)
+- **候选爆量的元凶不是 P2-a 资源召回,是"同函数跨 CWE 反复召回 + 去重太晚"**:1880 候选包去重后仅 184 唯一函数,90% 重复(`unauthorized` 桩函数被 376 个 CWE 各召一次,单函数摊 87 个包)。资源召回在 walle 净贡献一度为 0(全 `both`)——曾误判为"它的问题",实为**语言错配**(plan 误判成 js)的假象。
+- **语言探测被前端构建产物污染**:`fe/dist` 里的 `vendor.*.js`(webpack 打包)让 detect 误判 js、预扫描什么都命中。
+- **intent 未生成 → 关键词兜底 garbage-in**:`unauthorized` 3 行桩函数被误召 60 个 CWE。
+
+### 14.2 据此落地的改造(均实测)
+- **P0 候选去重前置**(explorer 落盘前按 `file:function` 合并,多 CWE 收进 `matched_cwes`):walle 实测 1258→186,**验证成本砍到约 1/7**。
+- **向量召回自适应 top_k + 相似度下限**:`clamp(index_size×5%, 5, 30)`(217 函数→11)+ `min_score` 默认 0.6。解决小项目"撒胡椒面"。
+- **预扫描/语言探测卫生**:忽略 build/dist/node_modules/vendor/migrations + 跳过 minified;walle 语言探测从误判 js 修正为 python。
+- **真语义 intent(Step 5)修 garbage-in**:实测 `unauthorized` 误召 **60→4**,rbac 授权模块 + by-id 取资源函数被精准召回。
+
+### 14.3 验证层试点结论(21 候选,质量优秀)
+- 桶分布 6 verified / 0 needs_review / 15 false_positive。
+- **发现 2 个已人工核实源码的真实高危逻辑漏洞**(正是 SAST 抓不到的那类):
+  1. `is_allow @ rbac/access.py` — 核心授权函数被改成无条件 `return True`(真校验全被注释),整个 RBAC 失效(授权绕过)。
+  2. `on_open @ websocket.py` — 认证失败后只 emit close **没有 return**,未认证用户可拿任意 task 数据。
+- **各机制验证通过**:Fast Severity Filter 灵(桩函数打 2/10 被 skip);P1 调用链推理生效(Guard 裁判推理"函数本身不限制+调用方查角色但没查 user-to-object 归属");假阳性控制强(有效守卫 `decorator`、签名 session 的 `load_user` 都被正确排除,未因函数名误判);精准区分**失效守卫**(is_allow)vs **有效守卫**(decorator)。裁判理由有真实源码依据,非幻觉。
+- 观察:0 needs_review 是候选证据明确所致(源码摆着能定论),非阈值失灵。
+
+### 14.4 结构/配置改造(据使用反馈)
+- **产物统一到 `<项目>/.audit_workspace/`**(见 `common/paths.py`):catalog/plan/cands/vec_index/report 全落被审项目,skill 目录只留代码+配置(699.xml、prescan_rules.json、resource_signals.json)。多项目审计互不覆盖。
+- **severity 阈值可配置**(`verify_workflow` 的 `severityThreshold`,默认 5):挖 0day 调低(3,少 skip、覆盖全、贵),快扫调高(7,多 skip、省)。
+- **调用链 caller 富化**(评估 §2.1):`build_call_chain_context` 内联前 3 个上游调用方的源码前 ~15 行,Guard 裁判能**读到**这条路径上有无鉴权,而非靠调用方名字盲猜。实测 walle `is_allow` 的链现在显示 `validator()` 真的调了 `is_login+is_allow`。
+- **资源信号词外置多语言隔离**(评估 §2.3):`resources/resource_signals.json` 按语言分桶;审计 Go 不再拖进 Java `@PathVariable`/Python `objects.get` 噪声。
+
+### 14.5 P2-a 判据更新(继承 §13.3)
+资源访问召回在**正确 python 索引 + 真语义 intent** 下确实有用(`get_id`/`load_user`/`fetch` 靠 `recall_source=resource/both` 召回),此前"净贡献 0"是语言错配假象。词法级天花板仍在(§13.3 边界 1 不变),但试点证明它在 by-id 取资源的越权高发面上补召回有效。
+
+---
+
+## 15. 被否决/缓做的优化(记录理由,防重复提案)
+
+以下建议经评估后**未采纳或缓做**。记录判据,避免以后重复讨论走进已排除的死胡同。
+
+### 15.1 ❌ "把候选 A 当一票,只跑 2 裁判省 token"
+- **提案**:探索得到候选 A 本身算作"1 票认为是真",三视角减为两视角,省 1/3 验证 token。
+- **否决理由(用 walle 试点数据)**:候选 A 是**召回信号**(噪声极大),不是判定。把"是候选"当一票 = 给每个候选白送一张赞成票,会**摧毁 §12 钉死的非对称阈值(1 票真即进 needs_review 的防漏报救命阀)**——几乎所有候选涌入 needs_review/verified,假阳性爆炸。`is_allow`(真漏洞)与 `decorator`(有效守卫)都是候选,"是候选"对区分它们零信息量。
+- **正确的省 token 杠杆**:召回去重(已做,1880→186)、top_k 收紧、severity 阈值可配。这些减少**喂进验证的候选数**,而非削弱投票。
+
+### 15.2 ❌ 确定性预筛 severity(用行数/形态在花钱前 drop 候选)
+- **提案**:桩函数/行数过短/纯 getter 用纯代码规则直接判 false_positive,连 severity agent 都省。
+- **否决理由(用 walle 试点数据)**:**逻辑漏洞的本质是"异常的简单"**——`is_allow`(真授权绕过)仅 20 行、主体就是 `return True`,比噪声 `lint`(27 行)还短。任何基于行数/形态的确定性规则都会**在花钱之前永久丢弃 `is_allow` 这类真 0day**,比"砍一个裁判"危险得多。判断必须交有语义理解的 agent。
+- **替代(已做)**:不加危险预筛,改为**加固 severity prompt**——显式警示"可疑地简单的授权门(return True / 校验被注释)是高危,不是样板代码",防止 severity filter 误杀 `is_allow` 这类。
+
+### 15.3 ❌ 并发验证(评估 §2.4:把串行 pipeline 改并发)
+- **提案**:外层 `pipeline` 串行执行候选,改 `parallel()` 分批并发提速。
+- **否决理由**:**诊断错误**。`pipeline()` 本身就是并发的(并发上限 min(16, cpu-2)),候选并行流过 stage,非串行循环。评估把 pipeline 误读成了顺序执行。真实瓶颈是总 agent 调用数×单价(§10-D),不是并发度。仅当确认 rate limit 是瓶颈时才需调并发数,不需重写结构。
+
+### 15.4 ⚠️ 技术栈敏感 intent(评估 §2.2)
+- **提案**:intent 生成时喂入项目技术栈(Flask/Django/Spring),生成栈专属检索词(如 Django `RawSQL`)。
+- **判定:方向对,缓做**。评估给的代码 `planData.tech_stack` 有事实错误——**plan 目前不存 tech_stack 字段**(预扫描 `found_tags` 未落盘到 plan)。要做需先做前置改造:orchestrator 把预扫描结果+框架识别持久化进 plan,再喂给 intent workflow。属新功能,留待有真实全量审计需求时数据驱动决策。

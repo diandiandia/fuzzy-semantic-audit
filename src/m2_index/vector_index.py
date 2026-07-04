@@ -41,6 +41,19 @@ def clean_code_block(markdown_text):
         cleaned.append(cleaned_line)
     return "\n".join(cleaned)
 
+def calculate_file_hash(filepath):
+    import hashlib
+    hasher = hashlib.md5()
+    try:
+        with open(filepath, 'rb') as f:
+            buf = f.read(65536)
+            while len(buf) > 0:
+                hasher.update(buf)
+                buf = f.read(65536)
+        return hasher.hexdigest()
+    except Exception:
+        return ""
+
 def build_index(project_path, target_lang="cpp"):
     if not TextEmbedding:
         raise ImportError("fastembed is not available in the current environment.")
@@ -78,8 +91,76 @@ def build_index(project_path, target_lang="cpp"):
         
     print(f"Found {len(target_files)} target source files after blacklisting.")
     
-    # 3. Extract all functions
-    functions_to_embed = []
+    # Calculate hashes of all target files
+    current_hashes = {}
+    for f in target_files:
+        abs_path = os.path.join(project_path, f)
+        h = calculate_file_hash(abs_path)
+        if h:
+            current_hashes[f] = h
+
+    # Check if we can do incremental indexing
+    out_dir = paths.vec_index_dir(project_path)
+    hash_file_path = os.path.join(out_dir, "file_hashes.json")
+    meta_path = os.path.join(out_dir, METADATA_FILE)
+    vec_path = os.path.join(out_dir, VECTORS_FILE)
+
+    existing_hashes = {}
+    existing_metadata = []
+    existing_vectors = None
+
+    if os.path.exists(hash_file_path) and os.path.exists(meta_path) and os.path.exists(vec_path):
+        try:
+            with open(hash_file_path, "r", encoding="utf-8") as hf:
+                existing_hashes = json.load(hf)
+            with open(meta_path, "r", encoding="utf-8") as mf:
+                existing_metadata = json.load(mf)
+            existing_vectors = np.load(vec_path)
+            # Ensure metadata and vectors match in length
+            if len(existing_metadata) != len(existing_vectors):
+                existing_hashes = {}
+                existing_metadata = []
+                existing_vectors = None
+        except Exception as e:
+            print(f"Warning: failed to load existing index for incremental update ({e}). Performing full build.")
+            existing_hashes = {}
+            existing_metadata = []
+            existing_vectors = None
+
+    # Identify unchanged, modified/new, and deleted files
+    unchanged_files = set()
+    modified_or_new_files = []
+    
+    for f in target_files:
+        if f in existing_hashes and current_hashes.get(f) == existing_hashes[f]:
+            unchanged_files.add(f)
+        else:
+            modified_or_new_files.append(f)
+
+    # Deleted files are in existing_hashes but not in target_files
+    deleted_files = set(existing_hashes.keys()) - set(target_files)
+
+    if not modified_or_new_files and not deleted_files and existing_vectors is not None:
+        print("All target files are unchanged. Vector index is up to date.")
+        return True
+
+    print(f"Incremental indexing: {len(unchanged_files)} unchanged, {len(modified_or_new_files)} modified/new, {len(deleted_files)} deleted.")
+
+    # Extract unchanged functions and their vectors
+    unchanged_corpus_meta = []
+    filtered_unchanged_vectors = np.empty((0, 384))
+    
+    if existing_vectors is not None:
+        unchanged_indices = []
+        for i, entry in enumerate(existing_metadata):
+            if entry["file"] in unchanged_files:
+                unchanged_indices.append(i)
+                unchanged_corpus_meta.append(entry)
+        if unchanged_indices:
+            filtered_unchanged_vectors = existing_vectors[unchanged_indices]
+
+    # 3. Extract functions from modified/new files
+    new_functions_to_embed = []
     
     def process_file_symbols(file_path):
         f_cmd = ["codegraph", "node", "-p", project_path, file_path, "--symbols-only"]
@@ -102,25 +183,39 @@ def build_index(project_path, target_lang="cpp"):
                 })
         return file_funcs
 
-    print("Extracting symbols from files...")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-        results = executor.map(process_file_symbols, target_files)
-        for r in results:
-            functions_to_embed.extend(r)
+    if modified_or_new_files:
+        print("Extracting symbols from modified/new files...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+            results = executor.map(process_file_symbols, modified_or_new_files)
+            for r in results:
+                new_functions_to_embed.extend(r)
+
+    # Deduplicate new functions against themselves
+    seen_new = set()
+    uniq_new_functions = []
+    for f in new_functions_to_embed:
+        if f["name"] not in seen_new:
+            seen_new.add(f["name"])
+            uniq_new_functions.append(f)
+
+    # Resolve name collisions: if a function exists in the new list, remove it from the unchanged list
+    # (since the modified file's version is the newer source of truth)
+    keep_indices = []
+    final_unchanged_meta = []
+    for i, entry in enumerate(unchanged_corpus_meta):
+        if entry["name"] not in seen_new:
+            keep_indices.append(i)
+            final_unchanged_meta.append(entry)
             
-    # Deduplicate functions
-    seen = set()
-    uniq_functions = []
-    for f in functions_to_embed:
-        if f["name"] not in seen:
-            seen.add(f["name"])
-            uniq_functions.append(f)
-            
-    print(f"Located {len(uniq_functions)} unique functions.")
+    if keep_indices and len(filtered_unchanged_vectors) > 0:
+        filtered_unchanged_vectors = filtered_unchanged_vectors[keep_indices]
+    else:
+        filtered_unchanged_vectors = np.empty((0, 384))
+
+    print(f"Retained {len(final_unchanged_meta)} unchanged unique functions, extracting {len(uniq_new_functions)} new/modified functions.")
     
-    # 4. Fetch source code for each function
-    print("Fetching source code for all functions...")
-    corpus = []
+    # 4. Fetch source code for new/modified functions
+    new_corpus = []
     
     def fetch_source_and_clean(func_meta):
         name = func_meta["name"]
@@ -140,33 +235,51 @@ def build_index(project_path, target_lang="cpp"):
             }
         return None
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
-        results = executor.map(fetch_source_and_clean, uniq_functions)
-        for r in results:
-            if r:
-                corpus.append(r)
-                
-    print(f"Harvested source code for {len(corpus)} functions. Embedding...")
+    if uniq_new_functions:
+        print("Fetching source code for new/modified functions...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
+            results = executor.map(fetch_source_and_clean, uniq_new_functions)
+            for r in results:
+                if r:
+                    new_corpus.append(r)
+
+    # 5. Embed new/modified functions
+    if new_corpus:
+        print(f"Embedding {len(new_corpus)} functions...")
+        model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+        texts = [c["text"] for c in new_corpus]
+        new_vectors = np.array(list(model.embed(texts)))
+    else:
+        new_vectors = np.empty((0, 384))
+
+    # Combine metadata
+    final_metadata = final_unchanged_meta + [{"name": c["name"], "file": c["file"], "line": c["line"]} for c in new_corpus]
     
-    if not corpus:
+    # Combine vectors
+    if len(filtered_unchanged_vectors) > 0 and len(new_vectors) > 0:
+        final_vectors = np.vstack([filtered_unchanged_vectors, new_vectors])
+    elif len(filtered_unchanged_vectors) > 0:
+        final_vectors = filtered_unchanged_vectors
+    else:
+        final_vectors = new_vectors
+
+    if not final_metadata:
         print("No functions found to index.")
         return False
-        
-    # 5. Embed functions
-    model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
-    texts = [c["text"] for c in corpus]
-    vectors = np.array(list(model.embed(texts)))
-    
+
     # 6. Save index
-    out_dir = paths.vec_index_dir(project_path)
     os.makedirs(out_dir, exist_ok=True)
     
     # Save metadata (without the 'text' field to save space)
-    metadata = [{"name": c["name"], "file": c["file"], "line": c["line"]} for c in corpus]
-    with open(os.path.join(out_dir, METADATA_FILE), "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2, ensure_ascii=False)
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(final_metadata, f, indent=2, ensure_ascii=False)
         
-    np.save(os.path.join(out_dir, VECTORS_FILE), vectors)
+    np.save(vec_path, final_vectors)
+    
+    # Save hashes file
+    with open(hash_file_path, "w", encoding="utf-8") as f:
+        json.dump(current_hashes, f, indent=2, ensure_ascii=False)
+
     print(f"Vector index built successfully. Saved to {out_dir}")
     return True
 

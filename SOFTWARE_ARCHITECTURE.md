@@ -60,8 +60,9 @@
 - **技术栈**:fastembed(ONNX)+ bge-small-en-v1.5(默认)/ jina-code(可选),隔离在 `.venv-embed`。
 - **职责**:
   1. `build_index(project)` —— tree-sitter/codegraph 切函数 → embed → 存本地向量索引
+     - **增量构建与缓存**：利用 `file_hashes.json` 缓存每个源文件的 MD5 哈希，仅对新增或被修改的文件执行重新提取与 embedding 计算，将无变更情况下的索引构建耗时缩短至秒级。对同名函数冲突，以最新修改文件的版本为准覆盖。
   2. `search(intent, top_k)` —— 语义召回 top-k 候选函数
-- **索引存储**:`<project>/.audit_temp/vec_index/`(向量 + 函数元数据)
+- **索引存储**:`<project>/.audit_workspace/vec_index/`(向量 + 函数元数据)
 - **接口契约**:
   ```
   search(intent: str, top_k: int) -> List[{name, file, line, score}]
