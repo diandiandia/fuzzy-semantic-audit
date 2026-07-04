@@ -59,11 +59,14 @@ async function run() {
     (t) => agent(
       `You are a security auditor building a semantic vector-search index for CWE-${t.cweId}: ${t.cweName}.\n` +
       `CWE description: ${t.description}\n\n` +
-      `Produce:\n` +
-      `1. queryIntents — 3 to 5 natural-language search queries describing the code patterns/operations/bug shapes for this CWE. ` +
-      `Full descriptive sentences, e.g. "memory is freed then the same pointer is dereferenced again". NOT keyword bags.\n` +
-      `2. vulnerabilityPrompt — specific patterns, taint flows, guard checks and logic errors to look for when verifying a function for this CWE.\n` +
-      `Return the required JSON.`,
+`Produce:\n` +
+`1. queryIntents — 3 to 5 natural-language search queries describing the code patterns/operations/bug shapes for this CWE. ` +
+`Full descriptive sentences, e.g. "memory is freed then the same pointer is dereferenced again". NOT keyword bags.\n` +
+`2. vulnerabilityPrompt — specific patterns, taint flows, guard checks and logic errors to look for when verifying a function for this CWE.\n` +
+`3. allCwes — list ALL CWE IDs that could potentially apply to this code pattern, not just the primary one. ` +
+`A function with a fixed-size stack buffer and an unchecked sprintf/strcpy write may be relevant to CWE-120 ` +
+`(buffer overflow) even if the CWE catalog only tags it for storage security. Return as an array of strings.\n` +
+`Return the required JSON.`,
       { label: `intent:${t.cweId}`, phase: 'Generate', schema: INTENT_SCHEMA }
     ).then(r => ({ task: t, intents: r })),
     // stage 2: write back (deterministic → agent shells the CLI)

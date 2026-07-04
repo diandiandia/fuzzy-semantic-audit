@@ -100,6 +100,7 @@ Rules:
 1. Use the UPSTREAM callers in call_chain_context: does any caller trace back to an external entry point? If yes, isReal may be true.
 2. Trust-boundary check: is data assumed internal-only actually reachable from an external caller per the chain? That itself is a finding.
 3. If the entrypoint is unknown, a unit test, or only a reachability hint of "low", assume NOT reachable (isReal=false).
+UNIVERSAL CHECK: The matched CWE tags may be incomplete. Independent of the listed CWEs, assess: can any parameter or size cause a memory read/write outside intended bounds? Can any integer operation wrap? Is there a path where preconditions are not met?
 Return the required JSON. lens must be "reachability". attackPath = external-input-to-function path if reachable, else "None". missingEvidence = what context is missing, else "None".`
 }
 function guardPrompt(pkgPath) {
@@ -111,6 +112,7 @@ Rules:
 1. Identify bounds checks, size limits, auth checks, state assertions, locks in the function AND its callers.
 2. Missing-authorization (BOLA/IDOR) lens: if the function acts on a caller-supplied id/key/path, verify an ownership/permission check exists ON THIS CALL PATH. A check existing elsewhere does NOT count. If none on-path, isReal=true.
 3. Only set isReal=true if a malicious input can concretely bypass, or if a required guard is provably absent on the reachable path.
+UNIVERSAL CHECK: The matched CWE tags may be incomplete. Independent of the listed CWEs, assess: can any parameter or size cause a memory read/write outside intended bounds? Can any integer operation wrap? Is there a path where preconditions are not met?
 Return the required JSON. lens must be "guard". attackPath = how to bypass / what unauthorized access is possible, else "None". missingEvidence = what context is missing, else "None".`
 }
 function exploitPrompt(pkgPath) {
@@ -123,6 +125,7 @@ Rules:
 2. State-machine bypass: can a required prior step (payment/validation/auth) be skipped by calling this directly or reordering calls, given the upstream callers?
 3. TOCTOU/race: is there a check-then-use gap on shared/filesystem state that a concurrent attacker can win?
 4. Trace tainted variables source→sink across the chain. Provide a concrete trigger/step sequence ONLY if one exists.
+UNIVERSAL CHECK: The matched CWE tags may be incomplete. Independent of the listed CWEs, assess: can any parameter or size cause a memory read/write outside intended bounds? Can any integer operation wrap? Can a pointer be used after free? Can a null pointer be dereferenced?
 Return the required JSON. lens must be "exploit". attackPath = concrete step-by-step trigger, else "None". missingEvidence = what context is missing, else "None".`
 }
 

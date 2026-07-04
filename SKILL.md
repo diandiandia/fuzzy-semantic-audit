@@ -59,6 +59,19 @@ Recall candidates via **three roads** — vector semantic search + CodeGraph sym
 "$VENV_PY" -m src.m3_locate.explorer --plan "$TARGET/.audit_workspace/audit_plan.json" --project "$TARGET"
 ```
 
+### Step 6.5: Recall Coverage Audit (召回覆盖审计)
+A deterministic scan to find functions with common sink patterns (fixed-size stack buffers with unchecked writes, raw copy operations under untrusted lengths, etc.) that have NO corresponding candidate file. This catches functions the semantic search may have missed due to intent quality gaps. Uses plain grep/source scanning — no LLM inference:
+
+```bash
+# Example: Find sprintf/strcpy/memcpy to fixed-size stack buffers without
+# corresponding candidate packages. Adjust patterns per the target language.
+# This is advisory — it flags "possibly missed" functions for manual review.
+# Output: $TARGET/.audit_workspace/recall_gaps.md
+python3 -m src.m3_locate.recall_auditor --cand-dir "$TARGET/.audit_workspace/pending_cands" \
+  --project "$TARGET" --output "$TARGET/.audit_workspace/recall_gaps.md"
+```
+This step is **optional but recommended** when the intent-generation quality is uncertain (e.g., when using fallback intent scripts). Its output does not automatically create new candidates — it surfaces coverage gaps for the operator to decide.
+
 ### Step 7: Execute Automated Verification Workflow (M4)
 Run the JavaScript verification workflow to perform two-stage severity filtering (Stage 1) and parallel referee verification (Stage 2), update verdicts, and compile the final report (into `$TARGET/.audit_workspace/audit_report.md`).
 > **`severityThreshold` (default 5)**: the Fast Severity Filter drops candidates scoring below this before the expensive three-referee stage. **Lower it (e.g. 3) to hunt 0-days** (fewer skips, wider coverage, higher cost); raise it (e.g. 7) for a cheap quick scan.
@@ -80,6 +93,8 @@ A single agent evaluates the potential security severity (1 to 10) of the candid
 
 ### Stage 2: Parallel Adversarial Referees (三视角对抗验证)
 If severity is `≥ 5`, the workflow spawns parallel subagents evaluating the target functions across three distinct perspectives with a default falsification stance (默认"证伪"立场). Each lens now covers both memory-class and logic-class flaws:
+
+> **Universal check (新增)**: Regardless of which CWEs are tagged on the candidate, every referee independently assesses: can any parameter, size, or index cause an operation to read/write outside its intended bounds? Can any integer wrap? Can any pointer be used after free or dereferenced null? The matched CWE list may be incomplete — referees must not restrict their analysis to the listed CWEs alone.
 
 1. **Path Reachability & Trust Boundary (路径可达性 + 信任边界)**:
    - Verify if the function is reachable from untrusted external inputs/interfaces (IPC, socket recv, public/HTTP API, route handler) via the upstream callers.
