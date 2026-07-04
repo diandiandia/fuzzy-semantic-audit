@@ -81,7 +81,7 @@
   build_call_chain_context(symbol) -> str      # ★P1:上游callers+下游callees 拼成调用链切片
   reachability_hint(file) -> str               # ★文件路径粗可达性分流(§10 降级方案)
   ```
-- **降级(§10 实测)**:`callers` 不可靠 → 主用 `get_source` 的 trail + `reachability_hint`(src/=高可达,monitor|tools|unit=低)。
+- **降级与兜底**：`callers` 不可靠且 CodeGraph 无法识别引用/调用。主用 `get_source` 的 trail + `reachability_hint`。**同时增加 ripgrep (rg) 文本搜索兜底**：在 `get_callers` 中，若 CodeGraph 返回空 callers，通过 rg 在全项目搜索符号名，读取对应文件内容并向上正则搜寻函数头部，作为兜底调用链参考，防止裁判误杀。
 - **★P1 调用链切片(系统设计 §13.2)**:逻辑漏洞(越权/状态机/信任边界)是跨函数的,`build_call_chain_context` 把上游 callers(谁能到达/是否校验)+ 下游 callees(是否敏感 sink)拼成切片,写入候选包 `call_chain_context` 字段,供 M4 裁判做跨函数推理。
 
 ### M3 — 定位召回模块 [移植+改]
@@ -99,7 +99,7 @@
 ### M4 — 验证编排模块 ★新增(P1 核心,Workflow)
 系统设计 §4 + §12 实测确定。
 
-- **技术栈**: Claude Code / Antigravity Workflow (JS) + `trifecta_verifier.py update` (Python 回写)
+- **技术栈**: Claude Code / Antigravity Workflow (JS) + `trifecta_verifier.py batch-update` (Python 批量回写)
 - **职责**:强制遍历全部 pending 候选 → 三视角对抗验证 → 三桶归类 → 回写。
 - **流程**(§4):
   ```
@@ -111,7 +111,7 @@
              ├ 裁判2 守卫有效性 + 缺失授权(BOLA/IDOR，须在 THIS PATH 上有校验)
              └ 裁判3 可触发性 + 状态机绕过 + TOCTOU/竞态
             三视角均读候选包的 call_chain_context 做跨函数推理(★P1)
-  → 非对称阈值三桶归类 → 调 M4-Python 回写 verdict
+  → 非对称阈值三桶归类 → 收集结果写出临时 JSON → 单次调用 M4-Python batch-update 回写 verdict
   ```
 - **三桶阈值(§12 实测钉死,不可改为多数票)**:
   - `verified`:≥2票真 且 有可复现 attackPath
@@ -219,7 +219,7 @@ fuzzy-semantic-audit/
 | 关注点 | 方案 |
 |---|---|
 | **断点续跑** | verdict=pending 即"未验证",Workflow 每次只捞 pending → 天然幂等续跑 |
-| **并发写 plan** | `plan_manager.py` 使用 `fcntl.flock` 强制文件锁: 读用共享锁(`LOCK_SH`), 写用独占锁(`LOCK_EX`)。`update_candidate_verdict` 在单次加锁事务内完成 load→modify→save, 杜绝并发写冲突导致的覆盖与丢失。 |
+| **并发写 plan** | `plan_manager.py` 使用 `fcntl.flock` 强制文件锁: 读用共享锁(`LOCK_SH`), 写用独占锁(`LOCK_EX`)。`update_candidate_verdict` / `batch_update_candidate_verdicts` 在单次加锁事务内完成 load→modify→save, 杜绝并发写冲突导致的覆盖与丢失。 |
 | **单 agent 失败** | Workflow `.filter(Boolean)`,单裁判死不毁全批(§10) |
 | **成本失控** | budget 硬上限 + 20候选试点 + 去重/过滤前置(§7 P2) |
 | **索引失效** | M2 build 前检查 codegraph status,失效则重建(移植 explorer 的 check 逻辑) |

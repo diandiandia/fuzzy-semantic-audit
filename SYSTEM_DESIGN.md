@@ -70,6 +70,7 @@ verdict:false_positive(误报):   11
 提供:`query`(符号搜索)、`explore`(符号源码+调用路径)、`node`(单符号+caller/callee)、`callers`/`callees`(可达性反查)、`impact`。
 - 定位阶段:找候选函数
 - **验证阶段(关键)**:裁判用 `callers` 反查"这个 sink 上游是否经过 auth/校验"、"入口是否外部可达" —— 这是砍假阳性的核心证据来源。
+- **调用链兜底**: CodeGraph callers 仅能精准索引符号定义，对 Python/JS 等动态调用或路由可能返回空列表。为此增加 `ripgrep (rg)` 兜底：若 callers 为空，运行 rg 全局搜索符号文本，并向上正则匹配包含它的函数定义，作为调用链参考，防止可达性误判造成的漏报 (False Negative)。
 
 **3.2 向量语义检索(★新增)**
 问题:`explorer.py` 现用 `codegraph query` 是**符号名匹配**,而 skill 让 AI 生成的是**自然语言语义 intent**(如 "validate permission before access")—— 二者错配,导致定位召回率存疑。
@@ -89,7 +90,7 @@ verdict:false_positive(误报):   11
 | `generate_ai_intents.py` | 合并 AI 生成的 intent/prompt | 保留 |
 | `explorer.py` | CodeGraph 定位候选 | **加双路召回**(见 3.2) |
 | `trifecta_verifier.py export` | 剪枝导出候选包 | 保留 |
-| `trifecta_verifier.py update` | **回写 verdict** | **改:见 §4.3 三桶** |
+| `trifecta_verifier.py` | **回写 verdict & 批量回写** | **改**: 支持 `needs_review`，并提供 `batch-update` 批量回写以规避频繁调用 agent() 运行 CLI 的 LLM 开销。 |
 | `m5_report/reporter.py` | 出三桶 Markdown 报告(`audit_orchestrator.py report` 委托至此) | **改:见 §4.3 三桶** |
 
 ### L3 方法论层 (Skill)
@@ -130,7 +131,7 @@ verdict:false_positive(误报):   11
           裁判3: 能否真实触发 (Control-Flow Exploitability + 攻击路径)
         每个裁判输出结构化 VERDICT(见 4.4)
 4. 汇总投票 → 三桶归类(见 4.3)
-5. 逐条调 trifecta_verifier.py update 回写 verdict
+5. 收集判定结果，单次调用 `trifecta_verifier.py batch-update` 批量回写 verdict
 6. 调 audit_orchestrator.py report 出报告
 ```
 
@@ -215,9 +216,9 @@ verdict:false_positive(误报):   11
 
 **P1 — 验证层(§10 实测:Workflow 强制遍历已验证通过)**
 5. **[新增·P1]** `verify_workflow` —— L4 Workflow 脚本(§4 核心)。**8/8 强制遍历实测通过**。
-6. **[改·P1]** `trifecta_verifier.py` —— 支持 `needs_review` 第三 verdict。
+6. **[改·P1]** `trifecta_verifier.py` —— 支持 `needs_review` 第三 verdict，以及 `batch-update` 批量写入能力，极大降低 LLM 执行开销。
 7. **[改·P1]** 三桶报告 —— 实现落在 `m5_report/reporter.py`;`audit_orchestrator.py report` 改为委托入口(消除旧的两桶实现与三桶设计的漂移)。
-8. **[改·P1]** 验证裁判证据源 —— 用 `codegraph node`(源码+trail)+ **文件路径粗可达性分流**,不依赖 `callers`(§10 实测其常只到"文件:1"级)。
+8. **[改·P1]** 验证裁判证据源 —— 用 `codegraph node`(源码+trail)+ **文件路径粗可达性分流**,不依赖 `callers`(§10 实测其常只到"文件:1"级)；对于 callers 接口在 dynamic calls/decorators 场景下可能为空的问题，提供 `ripgrep` 文本匹配并反向查找函数头部的兜底机制。
 9. **[改·P1]** `SKILL.md` —— 删人肉分批协议,Step 7 改为拉起 Workflow。
 
 **P2 — 成本闸门(§10 实测:全量盲跑 ≈ 8600万 token,必须设闸)**
@@ -246,7 +247,7 @@ audit_plan.json (含 pending 候选)
   ▼
 pending_cands/*.json
   │ ★ verify_workflow (强制遍历+对抗验证+三桶)   ← V4.0 核心
-  │ trifecta_verifier.py update (回写三桶 verdict)
+  │ trifecta_verifier.py batch-update (批量回写三桶 verdict)
   ▼
 audit_plan.json (含 verified/needs_review/false_positive)
   │ audit_orchestrator.py report (三桶报告)
