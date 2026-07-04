@@ -190,12 +190,13 @@ def build_index(project_path, target_lang="cpp"):
             for r in results:
                 new_functions_to_embed.extend(r)
 
-    # Deduplicate new functions against themselves
+    # Deduplicate new functions against themselves (by file and name)
     seen_new = set()
     uniq_new_functions = []
     for f in new_functions_to_embed:
-        if f["name"] not in seen_new:
-            seen_new.add(f["name"])
+        key = (f["file"], f["name"])
+        if key not in seen_new:
+            seen_new.add(key)
             uniq_new_functions.append(f)
 
     # Resolve name collisions: if a function exists in the new list, remove it from the unchanged list
@@ -203,7 +204,8 @@ def build_index(project_path, target_lang="cpp"):
     keep_indices = []
     final_unchanged_meta = []
     for i, entry in enumerate(unchanged_corpus_meta):
-        if entry["name"] not in seen_new:
+        key = (entry["file"], entry["name"])
+        if key not in seen_new:
             keep_indices.append(i)
             final_unchanged_meta.append(entry)
             
@@ -219,7 +221,9 @@ def build_index(project_path, target_lang="cpp"):
     
     def fetch_source_and_clean(func_meta):
         name = func_meta["name"]
-        cmd_node = ["codegraph", "node", "-p", project_path, name]
+        file_path = func_meta["file"]
+        # 使用 -f 参数对相同函数名但位于不同文件的函数进行消歧义
+        cmd_node = ["codegraph", "node", "-p", project_path, "-f", file_path, name]
         res_node = subprocess.run(cmd_node, capture_output=True, text=True)
         if res_node.returncode == 0:
             clean_code = clean_code_block(res_node.stdout)
@@ -229,7 +233,7 @@ def build_index(project_path, target_lang="cpp"):
             embed_text = f"{name}\n{sliced_code}"
             return {
                 "name": name,
-                "file": func_meta["file"],
+                "file": file_path,
                 "line": func_meta["line"],
                 "text": embed_text
             }

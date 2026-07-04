@@ -11,6 +11,14 @@ def setup_args():
     parser.add_argument("--output", required=True, help="Output markdown report path")
     return parser.parse_args()
 
+def file_url(plan, cand):
+    """返回本地绝对路径的 file:// URL,确保编辑器中可直接点击。"""
+    project_path = plan.get("project_path", "")
+    rel_path = cand.get("file", "")
+    abs_path = os.path.abspath(os.path.join(project_path, rel_path))
+    # Linux 绝对路径以 / 开头,file:// + /path... = file:///path...
+    return f"file://{abs_path}" if abs_path.startswith("/") else f"file:///{abs_path}"
+
 def cwe_label(task, cand):
     """去重后一个候选可命中多个 CWE:优先用候选的 matched_cwes,回退到 task 的单 CWE。"""
     matched = cand.get("matched_cwes")
@@ -25,7 +33,19 @@ def compile_report(plan_path, output_path):
     print(f"Compiling three-bucket report from plan: {plan_path}")
     
     # Track statistics
-    total_scanned_cwes = len(plan.get("tasks", []))
+    scanned_cwe_ids = plan.get("scanned_cwe_ids", [])
+    if not scanned_cwe_ids:
+        # 兼容未去重或未记录时从候选包的 matched_cwes 反推
+        cwe_set = set()
+        for task in plan.get("tasks", []):
+            for cand in task.get("result_candidates", []):
+                matched = cand.get("matched_cwes", [])
+                if matched:
+                    cwe_set.update(matched)
+                elif cand.get("cwe_id") and cand.get("cwe_id") != "MULTI":
+                    cwe_set.add(cand.get("cwe_id"))
+        scanned_cwe_ids = list(cwe_set)
+    total_scanned_cwes = len(scanned_cwe_ids) if scanned_cwe_ids else len(plan.get("tasks", []))
     total_candidates = 0
     verified = []
     needs_review = []
@@ -76,7 +96,7 @@ def compile_report(plan_path, output_path):
     else:
         for i, (task, cand) in enumerate(verified, 1):
             md.append(f"\n### {i}. {cwe_label(task, cand)}")
-            md.append(f"- **File Location**: `file://{cand['file']}`")
+            md.append(f"- **File Location**: `{file_url(plan, cand)}`")
             md.append(f"- **Target Function**: `{cand['function']}`")
             md.append(f"- **Reachability Entrypoint**: `{cand.get('entrypoint', 'N/A')}`")
             md.append(f"- **Recall Source**: `{cand.get('recall_source', 'unknown')}`")
@@ -112,7 +132,7 @@ def compile_report(plan_path, output_path):
     else:
         for i, (task, cand) in enumerate(needs_review, 1):
             md.append(f"\n### {i}. {cwe_label(task, cand)}")
-            md.append(f"- **File Location**: `file://{cand['file']}`")
+            md.append(f"- **File Location**: `{file_url(plan, cand)}`")
             md.append(f"- **Target Function**: `{cand['function']}`")
             md.append(f"- **Reachability Entrypoint**: `{cand.get('entrypoint', 'N/A')}`")
             md.append(f"- **Recall Source**: `{cand.get('recall_source', 'unknown')}`")
@@ -144,7 +164,7 @@ def compile_report(plan_path, output_path):
     else:
         for i, (task, cand) in enumerate(false_positive, 1):
             md.append(f"\n### {i}. {cwe_label(task, cand)} (Function: `{cand['function']}`)")
-            md.append(f"- **File Location**: `file://{cand['file']}`")
+            md.append(f"- **File Location**: `{file_url(plan, cand)}`")
             md.append(f"- **Recall Source**: `{cand.get('recall_source', 'unknown')}`")
             md.append(f"- **Dismissal Explanation**: {cand.get('triage_explanation', 'No detailed explanation provided.')}")
             

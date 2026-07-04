@@ -23,8 +23,8 @@ const REPO = A.repoRoot // fuzzy-semantic-audit dir, for `python -m src....`
 // 默认 5(均衡)。挖 0day 调低(如 3,少 skip、覆盖全、贵);快扫调高(如 7,多 skip、省)。
 const SEV_THRESHOLD = typeof A.severityThreshold === 'number' ? A.severityThreshold : 5
 
-if (!PLAN || !CAND_DIR || !REPO) {
-  throw new Error('args must include planPath, candDir, repoRoot')
+if (!PLAN || !CAND_DIR || !REPO || !PROJECT) {
+  throw new Error('args must include planPath, candDir, repoRoot, projectPath')
 }
 
 // ---- schemas: judgment is the agent's job; the workflow only orchestrates ----

@@ -12,7 +12,7 @@ from src.common import paths
 from src.m2_index import vector_index
 from src.m2_index.codegraph_wrapper import get_source, get_callers, reachability_hint, build_call_chain_context
 
-BLACKLIST_FOLDERS = {"monitor", "tools", "client", "unit", "emulator", "test", "tests", "mock", "mocks", "benchmark", "benchmarks", "gtest", "migrations", "node_modules", "vendor", "dist"}
+BLACKLIST_FOLDERS = vector_index.BLACKLIST_FOLDERS
 
 # P2-a 召回补强:逻辑漏洞类 CWE(越权/授权/信任边界/会话/资源访问控制)。
 # 这些漏洞的本质是"缺失的检查",向量/关键词只召回"存在的坏代码",召不回"本该有却没有的校验"
@@ -424,6 +424,7 @@ def main():
         "status": "explored",
         "result_candidates": unique_cands,
     }]
+    plan["scanned_cwe_ids"] = [t["cwe_id"] for t in tasks_snapshot]
     plan["status"] = "explored"
     save_plan(plan_path, plan)
 

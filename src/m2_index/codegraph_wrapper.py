@@ -3,8 +3,11 @@ import json
 import os
 import re
 
-def get_source(symbol, project_path):
-    cmd = ["codegraph", "node", "-p", project_path, symbol]
+def get_source(symbol, project_path, file_path=None):
+    cmd = ["codegraph", "node", "-p", project_path]
+    if file_path:
+        cmd.extend(["-f", file_path])
+    cmd.append(symbol)
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_path)
     if result.returncode == 0:
         return result.stdout
@@ -86,7 +89,8 @@ def build_call_chain_context(symbol, project_path, max_len=6000, caller_src_dept
         if not label:
             continue
         if i < caller_src_depth and it.get("name"):
-            src = get_source(it["name"], project_path)
+            caller_file = it.get("filePath") or it.get("file")
+            src = get_source(it["name"], project_path, file_path=caller_file)
             preview = _extract_code_preview(src, caller_src_lines)
             if preview:
                 up_parts.append(f"- {label}:\n```\n{preview}\n```")
