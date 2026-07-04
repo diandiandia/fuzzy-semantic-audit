@@ -60,7 +60,7 @@
 - **技术栈**:fastembed(ONNX)+ bge-small-en-v1.5(默认)/ jina-code(可选),隔离在 `.venv-embed`。
 - **职责**:
   1. `build_index(project)` —— tree-sitter/codegraph 切函数 → embed → 存本地向量索引
-     - **增量构建与缓存**：利用 `file_hashes.json` 缓存每个源文件的 MD5 哈希，仅对新增或被修改的文件执行重新提取与 embedding 计算，将无变更情况下的索引构建耗时缩短至秒级。对同名函数冲突，以最新修改文件的版本为准覆盖。
+     - **增量构建与缓存**：利用 `file_hashes.json` 缓存每个源文件的 MD5 哈希，仅对新增或被修改的文件执行重新提取与 embedding 计算，将无变更情况下的索引构建耗时缩短至秒级。同名函数按 `(file, name)` 复合键去重，避免跨文件同名冲突导致函数丢失；增量更新时，已修改文件的版本覆盖旧版。
   2. `search(intent, top_k)` —— 语义召回 top-k 候选函数
 - **索引存储**:`<project>/.audit_workspace/vec_index/`(向量 + 函数元数据)
 - **接口契约**:
@@ -74,7 +74,7 @@
 - **职责**:给 M4 裁判提供可达性证据(系统设计 §10 假设C)
 - **接口契约**:
   ```
-  get_source(symbol) -> str                    # node 命令,函数源码+trail
+  get_source(symbol, file_path=None) -> str    # node 命令,函数源码+trail;file_path 用于同名函数消歧义(-f)
   get_callers(symbol) -> List[str]             # 可达性(降级:见下)
   get_callees(symbol) -> List[str]             # ★P1:下游被调,看数据交给了谁
   explore(query) -> str                        # ★P1:相关符号源码+调用路径
@@ -139,6 +139,7 @@
   "project_path": "/home/zjamg/walle-web",
   "target_language": "python",
   "status": "initialized|exploring|explored|verifying|verified",
+  "scanned_cwe_ids": ["416", "190", "476", "639"], // 去重前的原始 CWE ID 列表，供报告统计真实扫描范围
   "tasks": [
     {
       "id": "task-deduped",
@@ -197,9 +198,8 @@ fuzzy-semantic-audit/
 ├── .venv-embed/                  # M2a 隔离环境(fastembed,不污染系统py)
 ├── resources/
 │   ├── 699.xml
-│   ├── cwe_699_catalog.json      # M1 产出
 │   ├── prescan_rules.json        # ★P0:外置技术栈预扫描规则
-│   └── audit_plan.json           # 单一真相源
+│   └── resource_signals.json     # ★P2-a:按语言分桶的资源访问信号词
 ├── src/
 │   ├── common/                   # plan_manager(读写)+ ★lang_utils(P0 语言映射)
 │   ├── m1_cwe/                   # cwe_parser:CWE解析裁剪
@@ -219,11 +219,11 @@ fuzzy-semantic-audit/
 | 关注点 | 方案 |
 |---|---|
 | **断点续跑** | verdict=pending 即"未验证",Workflow 每次只捞 pending → 天然幂等续跑 |
-| **并发写 plan** | M4 的 Python 回写(update)按 candidate_id 单条更新;Workflow 内串行回写,避免并发写冲突 |
+| **并发写 plan** | `plan_manager.py` 使用 `fcntl.flock` 强制文件锁: 读用共享锁(`LOCK_SH`), 写用独占锁(`LOCK_EX`)。`update_candidate_verdict` 在单次加锁事务内完成 load→modify→save, 杜绝并发写冲突导致的覆盖与丢失。 |
 | **单 agent 失败** | Workflow `.filter(Boolean)`,单裁判死不毁全批(§10) |
 | **成本失控** | budget 硬上限 + 20候选试点 + 去重/过滤前置(§7 P2) |
 | **索引失效** | M2 build 前检查 codegraph status,失效则重建(移植 explorer 的 check 逻辑) |
-| **诚实边界** | 报告显式标注:budget 截断数、未跑 CWE、needs_review 数(§7) |
+| **诚实边界** | 报告显式标注:budget 截断数、未跑 CWE、needs_review 数(§7);已扫描 CWE 数来源于 `scanned_cwe_ids`(去重前快照),而非去重后的单 task |
 
 ---
 

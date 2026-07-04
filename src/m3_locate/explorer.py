@@ -127,7 +127,7 @@ def extract_type_context(source_code, project_path, target_lang):
         for entry in q_res:
             node = entry.get("node", {})
             if node.get("kind") in struct_kinds:
-                node_detail = get_source(node["name"], project_path)
+                node_detail = get_source(node["name"], project_path, file_path=node.get("file"))
                 if node_detail:
                     struct_defs.append(f"// Definition for {node['kind']} {node['name']}\n{node_detail}")
                     break
@@ -272,7 +272,7 @@ def process_task(task, project_path, target_lang, max_candidates, vec_topk=30, v
             continue
             
         # Fetch source details
-        details = get_source(symbol_name, project_path)
+        details = get_source(symbol_name, project_path, file_path=file_path)
         if not details:
             continue
             
