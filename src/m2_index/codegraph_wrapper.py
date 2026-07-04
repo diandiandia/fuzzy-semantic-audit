@@ -13,12 +13,16 @@ def get_source(symbol, project_path, file_path=None):
         return result.stdout
     return ""
 
-def get_callers_ripgrep_fallback(symbol, project_path):
-    """Fallback using ripgrep to find occurrences of the symbol name.
-    
-    Reads backwards from matching lines to identify enclosing function headers.
+def find_usages_enclosing_functions(pattern, project_path, limit=40, is_regex=False):
+    """rg 搜 pattern 的所有 usages,反查每个命中所在的外层函数头,返回 [{name,file,line}]。
+    与 get_callers_ripgrep_fallback 共享"向上找函数头"逻辑,但入参是任意 pattern
+    (资源访问信号词/链式属性),不限于精确符号。给 explorer 第三路做语义无关的粗召回补强。
     """
-    cmd = ["rg", "-n", "-w", symbol, project_path]
+    cmd = ["rg", "-n"]
+    if not is_regex:
+        cmd.append("-w")
+    cmd.extend([pattern, project_path])
+    
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         return []
@@ -35,8 +39,8 @@ def get_callers_ripgrep_fallback(symbol, project_path):
             continue
         content_stripped = parts[2].strip()
         
-        # Ignore obvious definition/class signatures to reduce self-calls
-        if any(pat in content_stripped for pat in [f"def {symbol}", f"func {symbol}", f"function {symbol}", f"class {symbol}"]):
+        # 忽略定义/类名
+        if any(pat in content_stripped for pat in ["def ", "func ", "function ", "class "]):
             continue
             
         matches.append((file_path, line_num))
@@ -53,6 +57,8 @@ def get_callers_ripgrep_fallback(symbol, project_path):
     ]
     
     for file_path, line_num in matches:
+        if len(callers) >= limit:
+            break
         enclosing_func = None
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -66,30 +72,40 @@ def get_callers_ripgrep_fallback(symbol, project_path):
                             enclosing_func = m.group(1)
                             break
                     if enclosing_func:
-                        if enclosing_func == symbol:
-                            enclosing_func = None
-                            continue
                         break
         except Exception:
             pass
             
         rel_path = os.path.relpath(file_path, project_path)
-        if enclosing_func:
-            caller_name = enclosing_func
-        else:
-            caller_name = f"[module-level] {rel_path}:{line_num}"
+        if not enclosing_func:
+            enclosing_func = f"[module-level] {rel_path}:{line_num}"
             
-        key = (caller_name, rel_path)
+        key = (enclosing_func, rel_path)
         if key not in seen:
             seen.add(key)
             callers.append({
-                "name": caller_name,
-                "filePath": rel_path,
-                "line": line_num,
-                "is_fallback": True
+                "name": enclosing_func,
+                "file": rel_path,
+                "line": line_num
             })
             
-    return callers[:10]
+    return callers
+
+def get_callers_ripgrep_fallback(symbol, project_path):
+    """Fallback using ripgrep to find occurrences of the symbol name."""
+    usages = find_usages_enclosing_functions(symbol, project_path, limit=10, is_regex=False)
+    callers = []
+    for u in usages:
+        if u["name"] == symbol:
+            continue
+        callers.append({
+            "name": u["name"],
+            "filePath": u["file"],
+            "line": u["line"],
+            "is_fallback": True
+        })
+    return callers
+
 
 def get_callers(symbol, project_path):
     cmd = ["codegraph", "callers", "-p", project_path, "-l", "10", "-j", symbol]

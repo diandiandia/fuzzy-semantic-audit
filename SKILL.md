@@ -9,74 +9,30 @@ This skill automates parallel 0-day vulnerability analysis by leveraging CodeGra
 
 ## 🚀 Execution Procedures
 
-> **Environment variables (set these first):**
-> ```bash
-> export SKILL=/path/to/fuzzy-semantic-audit          # this skill's root directory (code + config only)
-> export VENV_PY="$SKILL/.venv-embed/bin/python"       # isolated interpreter with fastembed installed
-> export TARGET=/path/to/target/project                # project under audit
-> ```
-> **产物位置**: 所有审计产物(catalog / audit_plan.json / 候选包 / 向量索引 / 报告)统一落在
-> `$TARGET/.audit_workspace/` —— **不写入 skill 目录**。skill 只保留代码(`src/`,`workflows/`)
-> 与配置(`resources/699.xml`,`resources/prescan_rules.json`)。多项目审计互不覆盖。
-> 下面的命令用 `--project "$TARGET"` 驱动,产物路径自动推导;也可用 `--output`/`--plan` 显式覆盖。
-> ⚠️ **Interpreter note**: `fastembed` (required by the M2 vector layer) is installed **only** in `.venv-embed`.
-> Any step that touches the vector index — Step 4 (build) and Step 6 (explorer) — MUST run with `$VENV_PY`,
-> not the system `python3`, or it will crash with `ImportError: fastembed`. Steps 2/3 may use plain `python3`.
+### Primary Entrypoint: Full-Pipeline Orchestrated Workflow (推荐)
 
-### Step 1: Initialize CodeGraph Indexing
-Ensure the CodeGraph index is initialized and active for the target project:
-```bash
-# Run in project root:
-codegraph init /path/to/target/project
-```
+You can run the entire 7-step code audit process from zero to the final `audit_report.md` report via a **single workflow invocation**. This automatically detects the target language, builds indices, runs intent synthesis, recalls candidates, executes the three-referee verification, and compiles the report. It also automatically handles paths and encapsulates the python interpreter inside `.venv-embed`, eliminating environment traps.
 
-### Step 2: Ingest CWE-699 Weakness Catalog
-Parse the CWE-699 XML file and extract weaknesses applicable to the target language. Catalog is written to `$TARGET/.audit_workspace/catalog.json`:
-```bash
-python3 -m src.m1_cwe.cwe_parser --cwe "$SKILL/resources/699.xml" --lang python --project "$TARGET"
-```
+To run:
+1. Initialize the environment variables:
+   ```bash
+   export SKILL=/path/to/fuzzy-semantic-audit          # this skill's root directory (code + config only)
+   export TARGET=/path/to/target/project                # project under audit
+   ```
+2. Prompt the coding assistant (Claude Code / Antigravity) with this single instruction:
+   > *"Run the JavaScript workflow at `workflows/orchestrate_audit.js` with parameters: repoRoot = '$SKILL', projectPath = '$TARGET', limit = 200, severityThreshold = 5"*
 
-### Step 3: Auto-detect Project Features & Initialize Audit Plan
-Detect the dominant language and technology stack, prune irrelevant CWE tasks, and initialize the plan (into `$TARGET/.audit_workspace/audit_plan.json`). Omit `--lang` to auto-detect:
-```bash
-python3 -m src.m3_locate.audit_orchestrator init --project "$TARGET"
-```
+This workflow will:
+- Phase 1: **Prepare** (Parse catalog with `--lang all`, run `audit_orchestrator init` to detect language and build plan, build vector database).
+- Phase 2: **Intents** (Run `fuzzy-semantic-intents` sub-workflow to synthesize search queries and templates).
+- Phase 3: **Explore** (Recall candidates using dual-road search with ripgrep usage fallback and candidate deduplication).
+- Phase 4: **Verify** (Run `fuzzy-semantic-verify` sub-workflow to filter by severity and evaluate candidates via three adversarial referees, updating verdicts in batch and compiling the report).
 
-### Step 4: Build Vector Index (M2)
-Build the vector database using fastembed for semantic search. (Although the explorer will lazily build it if missing, explicit pre-building is recommended). Index is written to `$TARGET/.audit_workspace/vec_index/`. **Must use `$VENV_PY`** (fastembed lives in `.venv-embed`):
-```bash
-"$VENV_PY" -m src.m2_index.vector_index build --project "$TARGET" --lang python
-```
+---
 
-### Step 5: AI-Driven Prompt/Intent Synthesis (M6)
-Orchestrate the LLM to translate CWE tasks into specific semantic queries and vulnerability templates using the JavaScript workflow. **This step MUST complete before Step 6** — otherwise the explorer falls back to degenerate keyword search (garbage-in, see System Design §9):
-> **How to Run**: Prompt the coding assistant (Claude Code or Antigravity) to run this workflow:
-> *"Run the JavaScript workflow at `workflows/generate_intents_workflow.js` with parameters: planPath = '$TARGET/.audit_workspace/audit_plan.json', repoRoot = '$SKILL', venvPython = '$SKILL/.venv-embed/bin/python'"*
+### Alternative Entrypoint: Step-by-Step Manual Execution (分步手动执行)
 
-### Step 6: Run Semantic Exploration & Call-Chain Assembly (M3)
-Recall candidates via **three roads** — vector semantic search + CodeGraph symbol query + (for logic-flaw CWEs) resource-access recall — then assemble each candidate's `call_chain_context` (upstream callers + downstream callees), filter boilerplate/blacklisted directories (monitor/tools/client/unit/emulator), and export candidate packages into `$TARGET/.audit_workspace/pending_cands/`. **Must use `$VENV_PY`** (this step performs vector search and requires fastembed). Ensure Step 5 has already populated semantic intents:
-```bash
-"$VENV_PY" -m src.m3_locate.explorer --plan "$TARGET/.audit_workspace/audit_plan.json" --project "$TARGET"
-```
-
-### Step 6.5: Recall Coverage Audit (召回覆盖审计)
-A deterministic scan to find functions with common sink patterns (fixed-size stack buffers with unchecked writes, raw copy operations under untrusted lengths, etc.) that have NO corresponding candidate file. This catches functions the semantic search may have missed due to intent quality gaps. Uses plain grep/source scanning — no LLM inference:
-
-```bash
-# Example: Find sprintf/strcpy/memcpy to fixed-size stack buffers without
-# corresponding candidate packages. Adjust patterns per the target language.
-# This is advisory — it flags "possibly missed" functions for manual review.
-# Output: $TARGET/.audit_workspace/recall_gaps.md
-python3 -m src.m3_locate.recall_auditor --cand-dir "$TARGET/.audit_workspace/pending_cands" \
-  --project "$TARGET" --output "$TARGET/.audit_workspace/recall_gaps.md"
-```
-This step is **optional but recommended** when the intent-generation quality is uncertain (e.g., when using fallback intent scripts). Its output does not automatically create new candidates — it surfaces coverage gaps for the operator to decide.
-
-### Step 7: Execute Automated Verification Workflow (M4)
-Run the JavaScript verification workflow to perform two-stage severity filtering (Stage 1) and parallel referee verification (Stage 2), update verdicts, and compile the final report (into `$TARGET/.audit_workspace/audit_report.md`).
-> **`severityThreshold` (default 5)**: the Fast Severity Filter drops candidates scoring below this before the expensive three-referee stage. **Lower it (e.g. 3) to hunt 0-days** (fewer skips, wider coverage, higher cost); raise it (e.g. 7) for a cheap quick scan.
-> **How to Run**: Prompt the coding assistant (Claude Code or Antigravity) to run this workflow:
-> *"Run the JavaScript workflow at `workflows/verify_workflow.js` with parameters: planPath = '$TARGET/.audit_workspace/audit_plan.json', projectPath = '$TARGET', candDir = '$TARGET/.audit_workspace/pending_cands', repoRoot = '$SKILL', venvPython = '$SKILL/.venv-embed/bin/python', limit = 20, severityThreshold = 5"*
+If you need to debug a specific step, adjust intermediate outputs, or run a subset of the pipeline, you can use the manual step-by-step procedures documented in the [Appendix: Step-by-Step Manual Execution](#appendix-step-by-step-manual-execution).
 
 ---
 
@@ -141,3 +97,52 @@ To load this skill, create a symbolic link from your active environment's custom
   mkdir -p .claude/skills
   ln -s "/path/to/fuzzy-semantic-audit" ".claude/skills/fuzzy-semantic-audit"
   ```
+
+---
+
+## 📝 Appendix: Step-by-Step Manual Execution (分步手动执行)
+
+### Step 1: Initialize CodeGraph Indexing
+Ensure the CodeGraph index is initialized and active for the target project:
+```bash
+codegraph init /path/to/target/project
+```
+
+### Step 2: Ingest CWE-699 Weakness Catalog
+Parse the CWE-699 XML file and extract weaknesses applicable to the target language. Catalog is written to `$TARGET/.audit_workspace/catalog.json`:
+```bash
+python3 -m src.m1_cwe.cwe_parser --cwe "$SKILL/resources/699.xml" --lang python --project "$TARGET"
+```
+
+### Step 3: Auto-detect Project Features & Initialize Audit Plan
+Detect the dominant language and technology stack, prune irrelevant CWE tasks, and initialize the plan:
+```bash
+python3 -m src.m3_locate.audit_orchestrator init --project "$TARGET"
+```
+
+### Step 4: Build Vector Index (M2)
+Build the vector database using fastembed for semantic search. **Must use `$VENV_PY`**:
+```bash
+"$VENV_PY" -m src.m2_index.vector_index build --project "$TARGET" --lang python
+```
+
+### Step 5: AI-Driven Prompt/Intent Synthesis (M6)
+Orchestrate the LLM to translate CWE tasks into specific semantic queries using the JS workflow:
+> *"Run the JavaScript workflow at `workflows/generate_intents_workflow.js` with parameters: planPath = '$TARGET/.audit_workspace/audit_plan.json', repoRoot = '$SKILL', venvPython = '$SKILL/.venv-embed/bin/python'"*
+
+### Step 6: Run Semantic Exploration & Call-Chain Assembly (M3)
+Recall candidates via vector search + CodeGraph + resource-access recall:
+```bash
+"$VENV_PY" -m src.m3_locate.explorer --plan "$TARGET/.audit_workspace/audit_plan.json" --project "$TARGET"
+```
+
+### Step 6.5: Recall Coverage Audit (Optional)
+Deterministic scan to find functions with common sink patterns that have no corresponding candidate package:
+```bash
+python3 -m src.m3_locate.recall_auditor --cand-dir "$TARGET/.audit_workspace/pending_cands" \
+  --project "$TARGET" --output "$TARGET/.audit_workspace/recall_gaps.md"
+```
+
+### Step 7: Execute Automated Verification Workflow (M4)
+Run the JavaScript verification workflow to verify candidates:
+> *"Run the JavaScript workflow at `workflows/verify_workflow.js` with parameters: planPath = '$TARGET/.audit_workspace/audit_plan.json', projectPath = '$TARGET', candDir = '$TARGET/.audit_workspace/pending_cands', repoRoot = '$SKILL', venvPython = '$SKILL/.venv-embed/bin/python', limit = 20, severityThreshold = 5"*

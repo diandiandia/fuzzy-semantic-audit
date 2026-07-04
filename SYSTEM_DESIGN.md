@@ -39,7 +39,8 @@ verdict:false_positive(误报):   11
 
 ```
 ┌─ L4 编排层 (Workflow)  ★V4.0 新增,核心 ─────────────────┐
-│  强制遍历全部 pending 候选 → 对抗性多票验证 → 三桶归类     │
+│  全流程编排: cwe_parse → init → vector → intents →     │
+│  explorer → verification (FSF+referees) → reporter    │
 └──────────────────────────────────────────────────────┘
               ↑ 由 Skill 触发,读写 audit_plan.json
 ┌─ L3 方法论层 (Skill)  ─────────────────────────────────┐
@@ -220,6 +221,10 @@ verdict:false_positive(误报):   11
 7. **[改·P1]** 三桶报告 —— 实现落在 `m5_report/reporter.py`;`audit_orchestrator.py report` 改为委托入口(消除旧的两桶实现与三桶设计的漂移)。
 8. **[改·P1]** 验证裁判证据源 —— 用 `codegraph node`(源码+trail)+ **文件路径粗可达性分流**,不依赖 `callers`(§10 实测其常只到"文件:1"级)；对于 callers 接口在 dynamic calls/decorators 场景下可能为空的问题，提供 `ripgrep` 文本匹配并反向查找函数头部的兜底机制。
 9. **[改·P1]** `SKILL.md` —— 删人肉分批协议,Step 7 改为拉起 Workflow。
+10. **[新增·P0]** `orchestrate_audit.js` —— 顶级全流程编排 Workflow，统一替代人肉分步命令，屏蔽环境配置与解释器陷阱。
+11. **[改·P0·契约]** 各 Python CLI 补充 JSON 输出 —— cwe_parser、audit_orchestrator、explorer 的 stdout 末行统一输出单行 JSON，供编排器读取控制流程。
+12. **[新增·P1]** `find_usages_enclosing_functions` —— Ripgrep usages 反查外层函数召回原语，补齐 CodeGraph definition-only 查询的漏洞。
+13. **[改·P1]** `explorer.py` —— 引入 usages 召回，整合定义点与引用点外层函数，支持 `resource_signals.json` 中的链式属性正则。
 
 **P2 — 成本闸门(§10 实测:全量盲跑 ≈ 8600万 token,必须设闸)**
 10. **[闸门·P2]** 候选去重(按 file:function:cwe)+ 目录过滤后再验证。
@@ -452,3 +457,31 @@ audit_report.md
 ### 15.7 ⚠️ 增强技术栈裁剪覆盖率 (评估 #7 路线 Y)
 - **提案**: 扩充 `prescan_rules.json` 中的 CWE 映射关系，增强裁剪阶段的削减力度。
 - **判定: 缓做**。本系统裁剪阶段采用保守裁剪设计：不认识的 CWE 一律放行以防漏报。扩大映射覆盖面属于规则微调/调参，待未来针对特定高频漏洞类型的全量审计需求明确后，由真实数据驱动扩展。
+
+---
+
+## 16. 全流程编排设计 (Orchestration Workflow)
+
+### 16.1 动机与核心结构
+为了彻底消除前置定位与生成阶段的人工 shell 串联，以及解决不同子步骤间 Python 运行环境/解释器版本不一致的陷阱，引入顶级编排脚本 `orchestrate_audit.js`。
+编排器充当顶层管理者，使用 `agent()` 驱动确定性 Python CLI，并以 `workflow()` 内联执行 `intents` 生成和 `verify` 校验子工作流。
+
+### 16.2 机器可读契约 (Machine-Readable Contract)
+为了在无环的数据流中实现步骤间的条件分流（例如：若探索阶段无候选，则短路并直接生成空报告），各 Python CLI 的 stdout 需在末尾强制输出一行结构化单行 JSON 字符：
+- **`cwe_parser`** -> `{"catalog": "<path>", "weaknesses": N}`
+- **`audit_orchestrator init`** -> `{"plan": "<path>", "tasks": N, "lang": "<lang>"}`
+- **`explorer`** -> `{"unique": N, "cands_dir": "<path>"}`
+
+---
+
+## 17. 召回天花板补强: 基于 usages 反查的第三路粗召回
+
+### 17.1 定义-引用召回断层 (P1)
+CodeGraph 的符号检索在底层仅索引定义点，忽略了引用点。逻辑漏洞（如越权、未授权）的发生点往往在包含“对资源信号词的引用/调用”的外层包裹函数。
+为此，将 caller 兜底使用的“ripgrep 反查外层函数头”的能力提炼为独立的原语 `find_usages_enclosing_functions(pattern, project_path, limit, is_regex)`。
+
+### 17.2 双路并集召回
+Explorer 在执行第三路资源访问召回时，对信号词执行：
+1. 词法定义召回（CodeGraph Query 命中定义点）。
+2. usages 反查召回（Ripgrep 搜寻引用点，提取外层函数头）。
+两路结果执行并集去重，补齐了定义点之外的全部资源访问外围逻辑函数。同时通过 supports_regex 机制，允许在 `resource_signals.json` 中配置带点的复杂链式属性正则（例如 `objects\\.(get|filter)\\(`），将链式资源访问完整纳入召回池。

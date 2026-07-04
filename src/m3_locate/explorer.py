@@ -10,7 +10,7 @@ from src.common.plan_manager import load_plan, save_plan
 from src.common.lang_utils import extensions_for, LANG_EXTENSIONS, DEFAULT_LANG
 from src.common import paths
 from src.m2_index import vector_index
-from src.m2_index.codegraph_wrapper import get_source, get_callers, reachability_hint, build_call_chain_context
+from src.m2_index.codegraph_wrapper import get_source, get_callers, reachability_hint, build_call_chain_context, find_usages_enclosing_functions
 
 BLACKLIST_FOLDERS = vector_index.BLACKLIST_FOLDERS
 
@@ -170,31 +170,57 @@ def is_boilerplate_or_test(file_path, func_name, code_snippet, target_lang):
 def resource_access_recall(project_path, recalled_symbols, signals, limit=40):
     """P2-a 第三路召回:抓所有"按传入标识访问资源"的函数(越权高发区)。
 
-    确定性、不烧 token:用语言相关的资源访问信号词(signals)走 codegraph query,
-    命中的函数标记 source="resource"。仅对逻辑漏洞类 CWE 调用(见 LOGIC_FLAW_CWES)。
+    双路召回:
+    1. 走 codegraph query 词法匹配定义点。
+    2. 走 find_usages_enclosing_functions 文本匹配引用点的外层函数，补充 definition-only 限制。
+    仅对逻辑漏洞类 CWE 调用(见 LOGIC_FLAW_CWES)。
     limit 是确定性闸门,防候选池失控。
     """
     added = 0
     for signal in signals:
         if added >= limit:
             break
-        lex_results = run_codegraph_query(signal, project_path)
-        for entry in lex_results:
-            if added >= limit:
-                break
-            node = entry.get("node", {})
-            name = node.get("name")
-            if not name or node.get("kind") not in ["function", "method"]:
+
+        # 1. 词法定义召回 (仅对不带点/不带特殊正则的普通信号词跑 codegraph query)
+        if "." not in signal and "\\" not in signal:
+            lex_results = run_codegraph_query(signal, project_path)
+            for entry in lex_results:
+                if added >= limit:
+                    break
+                node = entry.get("node", {})
+                name = node.get("name")
+                if not name or node.get("kind") not in ["function", "method"]:
+                    continue
+                if name not in recalled_symbols:
+                    recalled_symbols[name] = {
+                        "file": node.get("filePath", "unknown"),
+                        "line": node.get("startLine", 1),
+                        "source": "resource",
+                    }
+                    added += 1
+                elif recalled_symbols[name]["source"] in ("vector", "symbol"):
+                    recalled_symbols[name]["source"] = "both"
+
+        if added >= limit:
+            break
+
+        # 2. 引用点外层函数召回 (usages 补强)
+        is_regex = "." in signal or "\\" in signal or "(" in signal
+        usages = find_usages_enclosing_functions(signal, project_path, limit=(limit - added), is_regex=is_regex)
+        for fn in usages:
+            name = fn.get("name")
+            if not name:
                 continue
             if name not in recalled_symbols:
                 recalled_symbols[name] = {
-                    "file": node.get("filePath", "unknown"),
-                    "line": node.get("startLine", 1),
+                    "file": fn.get("file", "unknown"),
+                    "line": fn.get("line", 1),
                     "source": "resource",
                 }
                 added += 1
             elif recalled_symbols[name]["source"] in ("vector", "symbol"):
                 recalled_symbols[name]["source"] = "both"
+
     return added
 
 
@@ -504,6 +530,8 @@ def main():
         
     print(f"\nAll tasks explored. Plan updated: {plan_path}")
     print(f"Exported {exported_count} candidate prompt packages to {output_dir}")
+    # Print machine-readable single-line JSON at the very end
+    print(json.dumps({"unique": len(unique_cands), "cands_dir": os.path.abspath(output_dir)}, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()

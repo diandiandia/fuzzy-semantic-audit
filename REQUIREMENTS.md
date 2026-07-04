@@ -28,6 +28,11 @@ This document details the system requirements (Functional, Verification, and Ope
 *   **Description**: The system must open a third recall road specifically targeting logical weaknesses (e.g., IDOR, BOLA, missing authorization) by harvesting functions that access resources using user-controlled parameters.
 *   **Design Brief**: Satisfied by `explorer.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/explorer.py)) for CWE IDs belonging to `LOGIC_FLAW_CWES`. It matches per-language resource access patterns (e.g., `findById`, `get_by_id`) configured in `resource_signals.json`.
 
+### REQ-REC-004: Usages-based Ripgrep Fallback Recall
+*   **Description**: The candidate explorer must support usage-based signal recall by searching for references of signals (including regexes and chain properties like objects.filter) and identifying their enclosing functions to bypass definition-only query limits.
+*   **Design Brief**: Satisfied by `find_usages_enclosing_functions` in `codegraph_wrapper.py` ([M2](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m2_index/codegraph_wrapper.py)) which runs `rg -n` on project files and searches upwards for function signatures.
+
+
 ### REQ-REC-003: Boilerplate and Noise Pruning
 *   **Description**: The system must ignore candidates in auxiliary folders (e.g., unit tests, client mockups, monitoring scripts) to keep the candidate pool relevant.
 *   **Design Brief**: Satisfied by `is_boilerplate_or_test` in `explorer.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/explorer.py)) which checks filenames and paths against `BLACKLIST_FOLDERS` (e.g., `test`, `mock`, `emulator`, `monitor`).
@@ -43,6 +48,11 @@ This document details the system requirements (Functional, Verification, and Ope
 ### REQ-WF-002: Batch Writeback Optimization
 *   **Description**: The system must aggregate candidate verification verdicts in memory and perform a single writeback operation to minimize LLM command execution overhead.
 *   **Design Brief**: Satisfied by [verify_workflow.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/verify_workflow.js) and `trifecta_verifier.py` ([M4](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m4_verify/trifecta_verifier.py)). The JS workflow dumps the results array to a temporary file (`temp_batch_results.json`) and calls the `batch-update` subcommand once, executing a single file lock write in `plan_manager.py`.
+
+### REQ-WF-003: End-to-End Workflow Orchestration
+*   **Description**: The system must provide a single entry point workflow that orchestrates the entire 7-step code audit process end-to-end to eliminate manual shell chaining.
+*   **Design Brief**: Satisfied by [orchestrate_audit.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/orchestrate_audit.js) (L4), which calls Python CLIs and sub-workflows. Python CLIs output a single-line JSON at the end (e.g. `cwe_parser` outputs `{"catalog": "<path>", "weaknesses": N}`) which is parsed by the JS workflow using a schema.
+
 
 ---
 

@@ -8,7 +8,7 @@ import os
 def setup_args():
     parser = argparse.ArgumentParser(description="CWE-699 XML Catalog Parser & Pruner")
     parser.add_argument("--cwe", required=True, help="Path to CWE XML file (e.g. 699.xml)")
-    parser.add_argument("--lang", choices=["cpp", "java", "python", "go", "js"], default="cpp", help="Target codebase language")
+    parser.add_argument("--lang", choices=["cpp", "java", "python", "go", "js", "all"], default="cpp", help="Target codebase language")
     parser.add_argument("--project", default=None, help="Target project (to write catalog into <project>/.audit_workspace/catalog.json)")
     parser.add_argument("--output", default=None, help="Output JSON path (default: <project>/.audit_workspace/catalog.json)")
     return parser.parse_args()
@@ -35,7 +35,7 @@ def parse_xml(xml_path, target_lang):
     # Mitre CWE XML namespace
     ns = {'ns': 'http://cwe.mitre.org/cwe-7'}
     
-    language_aliases = get_language_aliases(target_lang)
+    language_aliases = get_language_aliases(target_lang) if target_lang != "all" else []
     catalog = {}
     
     for weakness in root.findall('.//ns:Weakness', ns):
@@ -52,7 +52,7 @@ def parse_xml(xml_path, target_lang):
                 languages.append(lang_class)
                 
         # If languages are defined, verify compatibility
-        if languages:
+        if target_lang != "all" and languages:
             is_compatible = any(la in languages for la in language_aliases)
             if not is_compatible:
                 continue # Skip this weakness as it doesn't apply to the target language
@@ -84,8 +84,7 @@ def parse_xml(xml_path, target_lang):
                 "note": note
             })
 
-        # Demonstrative examples —— CWE 自带的漏洞示例代码(代码形态锚点,最高价值)。
-        # 只保留 Nature=Bad 的坏样例;Good 样例是修复版,对定位漏洞无用。
+        # Demonstrative examples
         bad_examples = []
         for ex in weakness.findall('.//ns:Demonstrative_Example', ns):
             intro_el = ex.find('ns:Intro_Text', ns)
@@ -101,7 +100,7 @@ def parse_xml(xml_path, target_lang):
                         "code": code
                     })
 
-        # Observed examples —— 真实 CVE 案例(佐证 intent,提供真实攻击语境)。
+        # Observed examples
         observed = []
         for obs in weakness.findall('.//ns:Observed_Example', ns):
             ref_el = obs.find('ns:Reference', ns)
@@ -111,7 +110,7 @@ def parse_xml(xml_path, target_lang):
                 "description": desc_el.text.strip() if (desc_el is not None and desc_el.text) else ""
             })
 
-        # Potential mitigations —— 反向判据:裁判据此判断"有无标准防护"→ 排 false_positive。
+        # Potential mitigations
         mitigations = []
         for mit in weakness.findall('.//ns:Mitigation', ns):
             phase_el = mit.find('ns:Phase', ns)
@@ -130,9 +129,9 @@ def parse_xml(xml_path, target_lang):
             "extended_description": ext_desc,
             "consequences": consequences,
             "languages": languages if languages else ["Language-Independent"],
-            "demonstrative_examples": bad_examples,   # 代码形态锚点(硬路径)
-            "observed_examples": observed,            # 真实 CVE 语境
-            "potential_mitigations": mitigations      # 裁判反向判据
+            "demonstrative_examples": bad_examples,
+            "observed_examples": observed,
+            "potential_mitigations": mitigations
         }
         
     print(f"Extraction completed. Retained {len(catalog)} weaknesses applicable to {target_lang}.")
@@ -157,6 +156,10 @@ def main():
     with open(output, "w", encoding="utf-8") as f:
         json.dump(catalog, f, indent=2, ensure_ascii=False)
     print(f"Saved catalog to: {output}")
+    
+    # Print machine-readable single-line JSON at the very end of stdout
+    print(json.dumps({"catalog": os.path.abspath(output), "weaknesses": len(catalog)}, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()
+

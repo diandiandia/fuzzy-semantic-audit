@@ -230,6 +230,8 @@ def cmd_init(args):
     with open(output_plan, "w", encoding="utf-8") as f:
         json.dump(plan, f, indent=2, ensure_ascii=False)
     print(f"Initialized audit plan with {len(plan['tasks'])} tasks. Saved to: {output_plan}")
+    # Print machine-readable single-line JSON at the very end
+    print(json.dumps({"plan": os.path.abspath(output_plan), "tasks": len(plan['tasks']), "lang": target_lang}, ensure_ascii=False))
 
 def cmd_report(args):
     # 三桶报告的唯一实现在 m5_report.reporter(verified / needs_review / false_positive)。
