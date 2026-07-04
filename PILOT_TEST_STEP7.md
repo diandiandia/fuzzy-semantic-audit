@@ -52,7 +52,7 @@
 ## 2. 需要回传给我的结果（按重要性排序）
 
 ### （必需）2.1 最终三桶报告
-生成的报告文件：`/home/zjamg/walle-web/audit_report.md` —— **把整个文件内容贴回来**。
+生成的报告文件：`/home/zjamg/walle-web/.audit_workspace/audit_report.md` —— **把整个文件内容贴回来**。
 
 ### （必需）2.2 每个候选的判定汇总表
 跑完后执行这条命令，把输出贴回来：
@@ -130,6 +130,9 @@ PY
 - 3 票全 false → `false_positive`
 
 **Step D — 回写**（对每个候选，在 skill 根目录跑）：
+
+> ⚠️ **注**：workflow 正式路径使用 `batch-update` 子命令一次性回写（见 `verify_workflow.js`）；此处 `update` 逐条回写仅为无 workflow 时的等价手动兜底，两者写入效果完全一致。
+
 ```bash
 /home/zjamg/test_project_code_audit/fuzzy-semantic-audit/.venv-embed/bin/python -m src.m4_verify.trifecta_verifier update \
   --plan /home/zjamg/test_project_code_audit/fuzzy-semantic-audit/resources/audit_plan.json \
@@ -143,7 +146,7 @@ PY
 ```bash
 /home/zjamg/test_project_code_audit/fuzzy-semantic-audit/.venv-embed/bin/python -m src.m5_report.reporter \
   --plan /home/zjamg/test_project_code_audit/fuzzy-semantic-audit/resources/audit_plan.json \
-  --output /home/zjamg/walle-web/audit_report.md
+  --output /home/zjamg/walle-web/.audit_workspace/audit_report.md
 ```
 
 然后回传第 2 节要求的结果。

@@ -11,7 +11,7 @@ This document details the system requirements (Functional, Verification, and Ope
 *   **Design Brief**: Satisfied by `cwe_parser.py` ([M1](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m1_cwe/cwe_parser.py)). It uses `xml.etree.ElementTree` to parse the catalog, matches `<Language>` nodes, and writes the language-specific catalog to `catalog.json` under `.audit_workspace/`.
 
 ### REQ-DET-001: Automatic Stack & Language Detection
-*   **Description**: The system must automatically detect the target project's primary programming language and framework stack to prune irrelevant CWE tasks.
+*   **Description**: The system must automatically detect the target project's primary programming language and framework stack to prune irrelevant CWE tasks. Note: Pruning is conservative — only CWEs explicitly mapped to missing tech stacks in prescan_rules are pruned; unmapped CWEs are preserved by default to prevent false negatives.
 *   **Design Brief**: Satisfied by `audit_orchestrator.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/audit_orchestrator.py)) and `lang_utils.py` ([common](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/common/lang_utils.py)). It counts file extensions in the target directory (ignoring build, test, and vendor dirs) and identifies frameworks based on dependency files (e.g., `package.json` for JS, `requirements.txt`/`Pipfile` for Python).
 
 ---
@@ -83,8 +83,8 @@ This document details the system requirements (Functional, Verification, and Ope
 *   **Design Brief**: Satisfied by `reporter.py` ([M5](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m5_report/reporter.py)). It formats candidate data, inlines the call chains, code snippets, and individual referee votes, and writes to `audit_report.md`.
 
 ### REQ-REP-002: Honest Completeness Boundary Logging
-*   **Description**: The report must clearly state completeness statistics, including budget limits, truncated candidates, and unscanned CWE tasks.
-*   **Design Brief**: Satisfied by `reporter.py` ([M5](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m5_report/reporter.py)) reading the plan's `scanned_cwe_ids` and checking if there are remaining candidates in `pending` status.
+*   **Description**: The report must display the count of remaining pending candidates to indicate that the verification run is potentially incomplete.
+*   **Design Brief**: Satisfied by `reporter.py` ([M5](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m5_report/reporter.py)) which counts the remaining candidates in the plan with `verdict == "pending"` and flags them in the report as "Unverified / Pending Candidates" to indicate incomplete audits.
 
 ---
 

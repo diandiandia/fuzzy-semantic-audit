@@ -388,6 +388,7 @@ def main():
     # 落盘成 1880 个候选包(去重后仅 184 唯一函数,90% 重复)。这里在落盘前按 file:function
     # 合并,一个函数只生成一个候选包,把它命中的多个 CWE 收进 matched_cwes 字段,验证时一次判定
     # 覆盖全部相关 CWE。1880 → ~184,验证成本直接砍到 1/10。
+    # 去重键 (file, function) —— 与 verify_workflow.js discover 去重键保持语义一致(explorer已合并多CWE,故workflow侧cweId恒唯一)
     dedup = {}  # (file, function) -> merged candidate dict
     src_rank = {"resource": 0, "symbol": 1, "vector": 2, "both": 3}
     for cand in all_exported_cands:

@@ -167,6 +167,7 @@ async function run() {
   log(`Discovered ${pending.length} pending candidates.`)
 
   // Deduplicate by file:function:cwe (deterministic — code, not agent)
+  // 注:此处的去重键与 explorer.py:391 的去重键 (file, function) 保持语义一致。因为 explorer 导出前已合并多 CWE 并只取一个代表 cwe_id，因此这里的 cweId 恒唯一。
   const seen = new Map()
   for (const p of pending) {
     const key = `${p.file}:${p.function}:${p.cweId}`

@@ -203,8 +203,16 @@ def reachability_hint(file_path):
     if any(part in low_reachable_folders for part in parts):
         return "low"
         
-    high_reachable_folders = {"src", "lib", "main"}
-    if any(part in high_reachable_folders for part in parts) or path_lower.startswith("src/") or path_lower.startswith("lib/"):
+    high_reachable_folders = {
+        "src", "lib", "main",                          # 通用/C/Java
+        "views", "view", "routes", "route", "api",     # web 通用
+        "controllers", "controller", "handlers", "handler",
+        "endpoints", "endpoint", "resources", "resource",
+        "blueprints", "blueprint",                     # flask
+        "urls", "middleware", "web", "http", "rpc",
+    }
+    if any(part in high_reachable_folders for part in parts):
         return "high"
         
     return "medium"
+
