@@ -13,11 +13,19 @@ def get_source(symbol, project_path, file_path=None):
         return result.stdout
     return ""
 
-def find_usages_enclosing_functions(pattern, project_path, limit=40, is_regex=False):
+def find_usages_enclosing_functions(pattern, project_path, limit=40, is_regex=False, exclude_name=None):
     """rg 搜 pattern 的所有 usages,反查每个命中所在的外层函数头,返回 [{name,file,line}]。
     与 get_callers_ripgrep_fallback 共享"向上找函数头"逻辑,但入参是任意 pattern
     (资源访问信号词/链式属性),不限于精确符号。给 explorer 第三路做语义无关的粗召回补强。
     """
+    func_regexes = [
+        re.compile(r'^\s*def\s+([A-Za-z0-9_]+)\b'), # Python
+        re.compile(r'^\s*func\s+(?:\([^)]+\)\s+)?([A-Za-z0-9_]+)\b'), # Go
+        re.compile(r'^\s*function\s+([A-Za-z0-9_]+)\b'), # JS/TS
+        re.compile(r'^\s*(?:const|let|var)\s+([A-Za-z0-9_]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_]+)\s*=>'), # JS arrow
+        re.compile(r'^\s*(?:[A-Za-z0-9_]+(?:\s*\*+)?\s+)+([A-Za-z0-9_]+)\s*\('), # C/C++ func
+    ]
+
     cmd = ["rg", "-n"]
     if not is_regex:
         cmd.append("-w")
@@ -39,22 +47,23 @@ def find_usages_enclosing_functions(pattern, project_path, limit=40, is_regex=Fa
             continue
         content_stripped = parts[2].strip()
         
-        # 忽略定义/类名
-        if any(pat in content_stripped for pat in ["def ", "func ", "function ", "class "]):
+        # Check if this line is a definition of the searched pattern itself.
+        # We only skip it if it defines a symbol matching the pattern.
+        is_self_def = False
+        for regex in func_regexes[:4]: # def, func, function, const/let/var
+            m = regex.match(parts[2])
+            if m:
+                defined_name = m.group(1)
+                if defined_name == pattern or (not is_regex and defined_name in pattern):
+                    is_self_def = True
+                break
+        if is_self_def:
             continue
             
         matches.append((file_path, line_num))
         
     callers = []
     seen = set()
-    
-    func_regexes = [
-        re.compile(r'^\s*def\s+([A-Za-z0-9_]+)\b'), # Python
-        re.compile(r'^\s*func\s+(?:\([^)]+\)\s+)?([A-Za-z0-9_]+)\b'), # Go
-        re.compile(r'^\s*function\s+([A-Za-z0-9_]+)\b'), # JS/TS
-        re.compile(r'^\s*(?:const|let|var)\s+([A-Za-z0-9_]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_]+)\s*=>'), # JS arrow
-        re.compile(r'^\s*(?:[A-Za-z0-9_]+(?:\s*\*+)?\s+)+([A-Za-z0-9_]+)\s*\('), # C/C++ func
-    ]
     
     for file_path, line_num in matches:
         if len(callers) >= limit:
@@ -72,6 +81,9 @@ def find_usages_enclosing_functions(pattern, project_path, limit=40, is_regex=Fa
                             enclosing_func = m.group(1)
                             break
                     if enclosing_func:
+                        if exclude_name and enclosing_func == exclude_name:
+                            enclosing_func = None
+                            continue
                         break
         except Exception:
             pass
@@ -93,11 +105,9 @@ def find_usages_enclosing_functions(pattern, project_path, limit=40, is_regex=Fa
 
 def get_callers_ripgrep_fallback(symbol, project_path):
     """Fallback using ripgrep to find occurrences of the symbol name."""
-    usages = find_usages_enclosing_functions(symbol, project_path, limit=10, is_regex=False)
+    usages = find_usages_enclosing_functions(symbol, project_path, limit=10, is_regex=False, exclude_name=symbol)
     callers = []
     for u in usages:
-        if u["name"] == symbol:
-            continue
         callers.append({
             "name": u["name"],
             "filePath": u["file"],
