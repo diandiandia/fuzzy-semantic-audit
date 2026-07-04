@@ -53,3 +53,50 @@ def update_candidate_verdict(plan_path, candidate_id, verdict, explanation, entr
             fcntl.flock(f, fcntl.LOCK_UN)
     return True
 
+def batch_update_candidate_verdicts(plan_path, updates):
+    """
+    Batch update candidate verdicts.
+    updates: list of dicts, each containing:
+      - candidate_id (str, optional)
+      - candidate_ids (list of str, optional)
+      - verdict (str)
+      - explanation (str)
+      - entrypoint (str, optional)
+      - votes (list, optional)
+    """
+    with open(plan_path, "r+", encoding="utf-8") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            plan = json.load(f)
+            
+            # Map of candidate_id -> update details
+            updates_map = {}
+            for u in updates:
+                c_id = u.get("candidate_id")
+                if c_id:
+                    updates_map[c_id] = u
+                for extra_id in u.get("candidate_ids", []):
+                    updates_map[extra_id] = u
+            
+            updated_count = 0
+            for task in plan.get("tasks", []):
+                for cand in task.get("result_candidates", []):
+                    cand_id = cand.get("id")
+                    if cand_id in updates_map:
+                        u = updates_map[cand_id]
+                        cand["verdict"] = u["verdict"]
+                        cand["triage_explanation"] = u["explanation"]
+                        if u.get("entrypoint") is not None:
+                            cand["entrypoint"] = u["entrypoint"]
+                        if u.get("votes") is not None:
+                            cand["votes"] = u["votes"]
+                        updated_count += 1
+            
+            f.seek(0)
+            json.dump(plan, f, indent=2, ensure_ascii=False)
+            f.truncate()
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+    return updated_count
+
+

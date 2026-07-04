@@ -220,15 +220,15 @@ async function run() {
       const dupIds = pending
         .filter(p => `${p.file}:${p.function}:${p.cweId}` === `${target.file}:${target.function}:${target.cweId}`)
         .map(p => p.candidateId)
-      await agent(
-        `Run this exact shell command for each candidate id in ${JSON.stringify(dupIds)} to write the verdict back to the plan. ` +
-        `Use the Bash tool. Working directory: ${REPO}. Command template (substitute <ID>):\n` +
-        `${PY} -m src.m4_verify.trifecta_verifier update --plan ${PLAN} --candidate-id <ID> --verdict ${verdict} ` +
-        `--explanation ${JSON.stringify(explanation)} --votes ${JSON.stringify(JSON.stringify(votes))}\n` +
-        `Report success/failure for each id. Do not analyze anything — only run the commands.`,
-        { label: `writeback:${target.candidateId}`, phase: 'Writeback' }
-      )
-      return { candidateId: target.candidateId, verdict, trueVotes: votes.filter(v => v.isReal).length }
+
+      return {
+        candidate_ids: dupIds,
+        verdict,
+        explanation,
+        votes,
+        candidateId: target.candidateId,
+        trueVotes: votes.filter(v => v.isReal).length
+      }
     }
   )
 
@@ -236,6 +236,24 @@ async function run() {
   const buckets = { verified: 0, needs_review: 0, false_positive: 0 }
   for (const r of confirmed) buckets[r.verdict] = (buckets[r.verdict] || 0) + 1
   log(`Verified ${confirmed.length} targets → verified:${buckets.verified} needs_review:${buckets.needs_review} false_positive:${buckets.false_positive}`)
+
+  if (confirmed.length > 0) {
+    phase('Writeback')
+    const batchResultsPath = `${PROJECT}/.audit_workspace/temp_batch_results.json`
+    await agent(
+      `Write the following JSON array of updates to the file: ${batchResultsPath}. You may overwrite it if it exists.\n\n` +
+      `\`\`\`json\n${JSON.stringify(confirmed.map(c => ({
+        candidate_ids: c.candidate_ids,
+        verdict: c.verdict,
+        explanation: c.explanation,
+        votes: c.votes
+      })), null, 2)}\n\`\`\`\n\n` +
+      `After writing the file, use the Bash tool (working directory: ${REPO}) to execute the batch update command:\n` +
+      `${PY} -m src.m4_verify.trifecta_verifier batch-update --plan ${PLAN} --results-file ${batchResultsPath}\n` +
+      `Verify the command exits successfully, then delete the temporary file ${batchResultsPath}.`,
+      { label: 'batch-writeback', phase: 'Writeback' }
+    )
+  }
 
   phase('Report')
   // 报告落在 workspace(<project>/.audit_workspace/audit_report.md),与其它产物同处
@@ -251,3 +269,4 @@ async function run() {
 }
 
 return await run()
+

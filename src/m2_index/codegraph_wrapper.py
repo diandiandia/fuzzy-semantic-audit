@@ -13,15 +13,98 @@ def get_source(symbol, project_path, file_path=None):
         return result.stdout
     return ""
 
+def get_callers_ripgrep_fallback(symbol, project_path):
+    """Fallback using ripgrep to find occurrences of the symbol name.
+    
+    Reads backwards from matching lines to identify enclosing function headers.
+    """
+    cmd = ["rg", "-n", "-w", symbol, project_path]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return []
+        
+    matches = []
+    for line in result.stdout.splitlines():
+        parts = line.split(":", 2)
+        if len(parts) < 3:
+            continue
+        file_path = parts[0]
+        try:
+            line_num = int(parts[1])
+        except ValueError:
+            continue
+        content_stripped = parts[2].strip()
+        
+        # Ignore obvious definition/class signatures to reduce self-calls
+        if any(pat in content_stripped for pat in [f"def {symbol}", f"func {symbol}", f"function {symbol}", f"class {symbol}"]):
+            continue
+            
+        matches.append((file_path, line_num))
+        
+    callers = []
+    seen = set()
+    
+    func_regexes = [
+        re.compile(r'^\s*def\s+([A-Za-z0-9_]+)\b'), # Python
+        re.compile(r'^\s*func\s+(?:\([^)]+\)\s+)?([A-Za-z0-9_]+)\b'), # Go
+        re.compile(r'^\s*function\s+([A-Za-z0-9_]+)\b'), # JS/TS
+        re.compile(r'^\s*(?:const|let|var)\s+([A-Za-z0-9_]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_]+)\s*=>'), # JS arrow
+        re.compile(r'^\s*(?:[A-Za-z0-9_]+(?:\s*\*+)?\s+)+([A-Za-z0-9_]+)\s*\('), # C/C++ func
+    ]
+    
+    for file_path, line_num in matches:
+        enclosing_func = None
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+                start_idx = min(line_num - 1, len(lines) - 1)
+                for idx in range(start_idx, -1, -1):
+                    line_text = lines[idx]
+                    for regex in func_regexes:
+                        m = regex.match(line_text)
+                        if m:
+                            enclosing_func = m.group(1)
+                            break
+                    if enclosing_func:
+                        if enclosing_func == symbol:
+                            enclosing_func = None
+                            continue
+                        break
+        except Exception:
+            pass
+            
+        rel_path = os.path.relpath(file_path, project_path)
+        if enclosing_func:
+            caller_name = enclosing_func
+        else:
+            caller_name = f"[module-level] {rel_path}:{line_num}"
+            
+        key = (caller_name, rel_path)
+        if key not in seen:
+            seen.add(key)
+            callers.append({
+                "name": caller_name,
+                "filePath": rel_path,
+                "line": line_num,
+                "is_fallback": True
+            })
+            
+    return callers[:10]
+
 def get_callers(symbol, project_path):
     cmd = ["codegraph", "callers", "-p", project_path, "-l", "10", "-j", symbol]
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_path)
+    callers = []
     if result.returncode == 0:
         try:
-            return json.loads(result.stdout).get("callers", [])
+            callers = json.loads(result.stdout).get("callers", [])
         except Exception:
             pass
-    return []
+            
+    if not callers:
+        callers = get_callers_ripgrep_fallback(symbol, project_path)
+    return callers
+
 
 def get_callees(symbol, project_path):
     cmd = ["codegraph", "callees", "-p", project_path, "-l", "10", "-j", symbol]

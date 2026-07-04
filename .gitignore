@@ -12,3 +12,4 @@ resources/pending_prompts_simple.json
 .audit_workspace/
 .audit_temp/
 *.bak
+.claude
