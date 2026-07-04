@@ -80,7 +80,7 @@ def build_index(project_path, target_lang="cpp"):
     for f in all_files:
         path = f.get("path", "")
         ext = os.path.splitext(path)[1].lower()
-        if ext not in valid_exts:
+        if valid_exts and ext not in valid_exts:
             continue
             
         parts = path.lower().replace('\\', '/').split('/')

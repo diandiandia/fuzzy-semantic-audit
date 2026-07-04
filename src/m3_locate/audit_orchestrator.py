@@ -125,17 +125,19 @@ def perform_pre_scan(project_path):
     return found_tags
 
 def calculate_pruned_cwes(catalog, found_tags):
-    # Determine which CWEs should be pruned
-    all_prune_candidates = set()
+    # Map each CWE to the tags that require it
+    cwe_to_tags = {}
     for tag, config in PRE_SCAN_KEYWORDS.items():
-        if tag not in found_tags:
-            # We didn't find keywords for this category, so we can prune its associated CWEs
-            all_prune_candidates.update(config["cwes"])
-            
+        for cwe in config["cwes"]:
+            if cwe not in cwe_to_tags:
+                cwe_to_tags[cwe] = set()
+            cwe_to_tags[cwe].add(tag)
+
     pruned_catalog = {}
     pruned_count = 0
     for w_id, info in catalog.items():
-        if w_id in all_prune_candidates:
+        # If the CWE is mapped to categories, prune it ONLY if none of its categories are found
+        if w_id in cwe_to_tags and not (cwe_to_tags[w_id] & found_tags):
             pruned_count += 1
             continue
         pruned_catalog[w_id] = info

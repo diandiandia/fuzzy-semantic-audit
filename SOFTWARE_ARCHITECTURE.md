@@ -136,18 +136,19 @@
 ### 3.1 audit_plan.json(单一真相源)
 ```jsonc
 {
-  "project_path": "/home/zjamg/bluez-5.86",
-  "target_language": "cpp",
+  "project_path": "/home/zjamg/walle-web",
+  "target_language": "python",
   "status": "initialized|exploring|explored|verifying|verified",
   "tasks": [
     {
-      "id": "task-cwe-416",
-      "cwe_id": "416",
-      "cwe_name": "Use After Free",
-      "description": "...",
-      "query_intents": ["free memory then use pointer", ...],  // M6 填,真语义
-      "vulnerability_prompt": "...",                            // M6 填
-      "status": "pending|explored",
+      "id": "task-deduped",
+      "type": "verify",
+      "cwe_id": "MULTI",
+      "cwe_name": "Deduplicated candidates (multi-CWE)",
+      "description": "Unique file:function candidates merged across all CWE recall roads.",
+      "query_intents": [],
+      "vulnerability_prompt": "",
+      "status": "explored",
       "result_candidates": [ /* 见 3.2 */ ]
     }
   ]

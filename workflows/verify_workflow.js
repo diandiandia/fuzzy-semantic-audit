@@ -52,13 +52,12 @@ const PENDING_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['candidateId', 'cweId', 'file', 'function', 'packagePath'],
+        required: ['candidateId', 'cweId', 'file', 'function'],
         properties: {
           candidateId: { type: 'string' },
           cweId: { type: 'string' },
           file: { type: 'string' },
           function: { type: 'string' },
-          packagePath: { type: 'string' },
         },
       },
     },
@@ -157,7 +156,7 @@ async function run() {
   phase('Discover')
   const disc = await agent(
     `Read the audit plan JSON at ${PLAN} using the Read tool. Walk every task and every element of result_candidates. ` +
-    `Collect ONLY candidates whose "verdict" field equals "pending". For each, the package file is at ${CAND_DIR}/<candidate id>.json . ` +
+    `Collect ONLY candidates whose "verdict" field equals "pending". ` +
     `Return the pending list. Do not verify anything — this is discovery only.`,
     { label: 'discover-pending', phase: 'Discover', schema: PENDING_SCHEMA }
   )
