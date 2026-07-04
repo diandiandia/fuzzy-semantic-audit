@@ -11,7 +11,7 @@ export const meta = {
 }
 
 // ---- args (injected verbatim) ----
-// { planPath: string, candDir: string, projectPath: string, venvPython?: string, limit?: number }
+// { planPath, candDir, projectPath, venvPython?, limit?, severityThreshold? }
 const A = args || {}
 const PLAN = A.planPath
 const CAND_DIR = A.candDir
@@ -19,6 +19,9 @@ const PROJECT = A.projectPath
 const PY = A.venvPython || 'python3'
 const LIMIT = typeof A.limit === 'number' ? A.limit : 200
 const REPO = A.repoRoot // fuzzy-semantic-audit dir, for `python -m src....`
+// severity 前置筛选阈值:低于此分数的候选判 false_positive 跳过昂贵的三裁判。
+// 默认 5(均衡)。挖 0day 调低(如 3,少 skip、覆盖全、贵);快扫调高(如 7,多 skip、省)。
+const SEV_THRESHOLD = typeof A.severityThreshold === 'number' ? A.severityThreshold : 5
 
 if (!PLAN || !CAND_DIR || !REPO) {
   throw new Error('args must include planPath, candDir, repoRoot')
@@ -74,13 +77,16 @@ const SEVERITY_SCHEMA = {
 
 // ---- severity and referee prompt builders (default-falsification stance, System Design §12) ----
 function severityPrompt(pkgPath) {
+  const T = SEV_THRESHOLD
   return `You are a security triage assistant.
 Read the candidate package JSON at: ${pkgPath} (use the Read tool).
 Assess the potential security severity (1 to 10) of verifying this candidate function for a security vulnerability matching the specified CWE.
+Candidates scoring ${T} or above will be sent to full adversarial verification; below ${T} are dropped as false positives. Score accordingly.
 Considerations:
-- High Severity (5-10): The function directly processes untrusted network packets, user input, cryptography, authentication, authorization, memory allocation/copy, or system commands.
-- ALSO High Severity (5-10) even with no memory ops: the function acts on a caller-supplied identifier to read/modify a resource (CRUD/handler/service accessing an object by id/key/path), performs a state transition (order/payment/session lifecycle), or gates access — these are prime logic-flaw (IDOR / state-bypass / missing-authz) surfaces that have NO syntactic signature. Do NOT rate these low just because they "look like plain business logic".
-- Low Severity (1-4): The function is auxiliary code with no security decision and no untrusted data: logging, debugging, UI rendering, static configuration loading, test helpers, or standard boilerplate.
+- High Severity (>=${T}): The function directly processes untrusted network packets, user input, cryptography, authentication, authorization, memory allocation/copy, or system commands.
+- ALSO High Severity even with no memory ops: the function acts on a caller-supplied identifier to read/modify a resource (CRUD/handler/service accessing an object by id/key/path), performs a state transition (order/payment/session lifecycle), or gates access — these are prime logic-flaw (IDOR / state-bypass / missing-authz) surfaces that have NO syntactic signature. Do NOT rate these low just because they "look like plain business logic".
+- Low Severity (below ${T}): The function is auxiliary code with no security decision and no untrusted data: logging, debugging, UI rendering, static configuration loading, test helpers, or standard boilerplate.
+- ⚠️ TRAP — do NOT rate low just because the function is SHORT or its body looks trivial: an authorization/permission/validation function whose real check has been commented out, stubbed, or replaced by an unconditional \`return True\`/\`return true\`/\`return allow\` is a HIGH-severity access-control bypass, not harmless boilerplate. "Suspiciously simple gate" = high, not low.
 Return the required JSON containing 'severity' and 'reason'.`
 }
 const PKG_FIELDS = 'It contains cwe_id, cwe_name, file, function, code_snippet, struct_definitions, call_chain_context (upstream callers + downstream callees), and entrypoint_candidate.'
@@ -182,8 +188,8 @@ async function run() {
         severityPrompt(`${CAND_DIR}/${t.candidateId}.json`),
         { label: `sev:${t.candidateId}`, phase: 'Verify', schema: SEVERITY_SCHEMA }
       )
-      if (sev && sev.severity < 5) {
-        log(`[Fast Filter] ${t.file}:${t.function} severity is ${sev.severity}/10 (below 5). Skipping verification.`)
+      if (sev && sev.severity < SEV_THRESHOLD) {
+        log(`[Fast Filter] ${t.file}:${t.function} severity ${sev.severity}/10 (below ${SEV_THRESHOLD}). Skipping verification.`)
         return { target: t, skipped: true, severity: sev.severity, reason: sev.reason }
       }
       
@@ -201,7 +207,7 @@ async function run() {
       let verdict, explanation, votes
       if (rv.skipped) {
         verdict = 'false_positive'
-        explanation = `Excluded — Security severity rated as ${rv.severity}/10 (below audit threshold 5).\nReason: ${rv.reason}`
+        explanation = `Excluded — Security severity rated as ${rv.severity}/10 (below audit threshold ${SEV_THRESHOLD}).\nReason: ${rv.reason}`
         votes = []
       } else {
         votes = rv.votes
@@ -230,7 +236,8 @@ async function run() {
   log(`Verified ${confirmed.length} targets → verified:${buckets.verified} needs_review:${buckets.needs_review} false_positive:${buckets.false_positive}`)
 
   phase('Report')
-  const reportPath = `${PROJECT}/audit_report.md`
+  // 报告落在 workspace(<project>/.audit_workspace/audit_report.md),与其它产物同处
+  const reportPath = `${PROJECT}/.audit_workspace/audit_report.md`
   await agent(
     `Run this exact shell command with the Bash tool (working directory ${REPO}) to compile the three-bucket report:\n` +
     `${PY} -m src.m5_report.reporter --plan ${PLAN} --output ${reportPath}\n` +

@@ -6,6 +6,7 @@ import concurrent.futures
 import numpy as np
 
 from src.common.lang_utils import extensions_for
+from src.common import paths
 
 # Use fastembed when running in the virtual environment
 try:
@@ -13,7 +14,8 @@ try:
 except ImportError:
     TextEmbedding = None
 
-VEC_INDEX_DIR = ".audit_temp/vec_index"
+# 向量索引落在 <project>/.audit_workspace/vec_index/(见 common/paths.py)。
+# 保留 METADATA_FILE/VECTORS_FILE 常量名不变(外部按名引用)。
 METADATA_FILE = "metadata.json"
 VECTORS_FILE = "vectors.npy"
 
@@ -156,7 +158,7 @@ def build_index(project_path, target_lang="cpp"):
     vectors = np.array(list(model.embed(texts)))
     
     # 6. Save index
-    out_dir = os.path.join(project_path, VEC_INDEX_DIR)
+    out_dir = paths.vec_index_dir(project_path)
     os.makedirs(out_dir, exist_ok=True)
     
     # Save metadata (without the 'text' field to save space)
@@ -171,7 +173,7 @@ def build_index(project_path, target_lang="cpp"):
 def index_size(project_path):
     """返回索引里的函数总数(供 explorer 按项目规模自适应 top_k)。索引缺失返回 0。"""
     project_path = os.path.abspath(project_path)
-    meta_path = os.path.join(project_path, VEC_INDEX_DIR, METADATA_FILE)
+    meta_path = os.path.join(paths.vec_index_dir(project_path), METADATA_FILE)
     if not os.path.exists(meta_path):
         return 0
     try:
@@ -190,7 +192,7 @@ def search(project_path, intent, top_k=30, min_score=0.0):
         raise ImportError("fastembed is not available in the current environment.")
 
     project_path = os.path.abspath(project_path)
-    out_dir = os.path.join(project_path, VEC_INDEX_DIR)
+    out_dir = paths.vec_index_dir(project_path)
     meta_path = os.path.join(out_dir, METADATA_FILE)
     vec_path = os.path.join(out_dir, VECTORS_FILE)
 

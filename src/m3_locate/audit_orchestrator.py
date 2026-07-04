@@ -7,6 +7,7 @@ import re
 import subprocess
 
 from src.common.lang_utils import EXT_TO_LANG, all_source_extensions, DEFAULT_LANG
+from src.common import paths
 
 # 技术栈预扫描规则外置到 resources/prescan_rules.json(P0 去硬编码),
 # 找不到文件时退回内置的通用多语言兜底集,保证脚本仍可运行。
@@ -70,17 +71,19 @@ def setup_args():
     parser = argparse.ArgumentParser(description="Audit Orchestrator & Plan Manager")
     subparsers = parser.add_subparsers(dest="command", required=True)
     
-    # Init plan subcommand
+    # Init plan subcommand. 产物默认落在 <project>/.audit_workspace/(见 common/paths.py);
+    # --catalog/--output 可选,不传则用 workspace 默认路径。
     init_parser = subparsers.add_parser("init", help="Initialize audit plan from catalog")
-    init_parser.add_argument("--catalog", required=True, help="Path to parsed cwe_699_catalog.json")
+    init_parser.add_argument("--catalog", default=None, help="Path to CWE catalog JSON (default: <project>/.audit_workspace/catalog.json)")
     init_parser.add_argument("--project", required=True, help="Path to target project codebase")
     init_parser.add_argument("--lang", default=None, help="Project programming language (auto-detected if omitted)")
-    init_parser.add_argument("--output", required=True, help="Output audit_plan.json path")
-    
+    init_parser.add_argument("--output", default=None, help="Output audit_plan.json path (default: <project>/.audit_workspace/audit_plan.json)")
+
     # Report compile subcommand
     report_parser = subparsers.add_parser("report", help="Compile verified findings into markdown report")
-    report_parser.add_argument("--plan", required=True, help="Path to audit_plan.json")
-    report_parser.add_argument("--output", required=True, help="Output markdown report path")
+    report_parser.add_argument("--project", default=None, help="Target project (to derive default workspace paths)")
+    report_parser.add_argument("--plan", default=None, help="Path to audit_plan.json (default: <project>/.audit_workspace/audit_plan.json)")
+    report_parser.add_argument("--output", default=None, help="Output report path (default: <project>/.audit_workspace/audit_report.md)")
     
     return parser.parse_args()
 
@@ -175,15 +178,20 @@ def detect_language(project_path):
 
 def cmd_init(args):
     project_path = os.path.abspath(args.project)
-    
+
+    # 产物统一到 <project>/.audit_workspace/;未显式指定则用默认路径
+    paths.ensure_workspace(project_path)
+    catalog_file = args.catalog or paths.catalog_path(project_path)
+    output_plan = args.output or paths.plan_path(project_path)
+
     # 1. Check and initialize CodeGraph index
     check_codegraph_index(project_path)
-    
-    if not os.path.exists(args.catalog):
-        print(f"Error: Catalog file {args.catalog} does not exist", file=sys.stderr)
+
+    if not os.path.exists(catalog_file):
+        print(f"Error: Catalog file {catalog_file} does not exist", file=sys.stderr)
         sys.exit(1)
         
-    with open(args.catalog, "r", encoding="utf-8") as f:
+    with open(catalog_file, "r", encoding="utf-8") as f:
         catalog = json.load(f)
         
     # 2. Auto-detect programming language if not specified
@@ -217,16 +225,24 @@ def cmd_init(args):
             "result_candidates": [] # Will store candidate symbols and functions
         })
         
-    with open(args.output, "w", encoding="utf-8") as f:
+    with open(output_plan, "w", encoding="utf-8") as f:
         json.dump(plan, f, indent=2, ensure_ascii=False)
-    print(f"Initialized audit plan with {len(plan['tasks'])} tasks. Saved to: {args.output}")
+    print(f"Initialized audit plan with {len(plan['tasks'])} tasks. Saved to: {output_plan}")
 
 def cmd_report(args):
     # 三桶报告的唯一实现在 m5_report.reporter(verified / needs_review / false_positive)。
     # orchestrator 的 report 子命令保留为兼容入口,直接委托给 reporter,避免维护两份
     # 且防止旧的两桶实现与 §13 三桶设计漂移(此前它只渲染 verified/false_positive)。
     from src.m5_report import reporter
-    reporter.compile_report(args.plan, args.output)
+    plan_file = args.plan
+    output_file = args.output
+    if (not plan_file or not output_file):
+        if not args.project:
+            print("Error: report needs --plan+--output, or --project to derive workspace defaults.", file=sys.stderr)
+            sys.exit(1)
+        plan_file = plan_file or paths.plan_path(args.project)
+        output_file = output_file or paths.report_path(args.project)
+    reporter.compile_report(plan_file, output_file)
 
 def main():
     args = setup_args()

@@ -8,6 +8,7 @@ import sys
 
 from src.common.plan_manager import load_plan, save_plan
 from src.common.lang_utils import extensions_for, LANG_EXTENSIONS, DEFAULT_LANG
+from src.common import paths
 from src.m2_index import vector_index
 from src.m2_index.codegraph_wrapper import get_source, get_callers, reachability_hint, build_call_chain_context
 
@@ -329,17 +330,17 @@ def main():
               f"(all files pass extension filter). Consider adding it to lang_utils.LANG_EXTENSIONS.", file=sys.stderr)
     
     # 1. Trigger Vector Index build if not exists
-    vec_dir = os.path.join(project_path, vector_index.VEC_INDEX_DIR)
+    vec_dir = paths.vec_index_dir(project_path)
     if not os.path.exists(os.path.join(vec_dir, vector_index.METADATA_FILE)):
         print("Vector index missing. Building...")
         vector_index.build_index(project_path, target_lang)
-        
+
     plan["status"] = "exploring"
     tasks = plan.get("tasks", [])
 
     output_dir = args.output_dir
     if not output_dir:
-        output_dir = os.path.join(project_path, ".audit_temp", "pending_cands")
+        output_dir = paths.cands_dir(project_path)
     os.makedirs(output_dir, exist_ok=True)
 
     # 按项目规模自适应向量召回宽度 + 相似度下限(P0 收紧,防小项目撒胡椒面)

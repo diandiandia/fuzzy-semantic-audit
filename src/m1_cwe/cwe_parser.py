@@ -9,7 +9,8 @@ def setup_args():
     parser = argparse.ArgumentParser(description="CWE-699 XML Catalog Parser & Pruner")
     parser.add_argument("--cwe", required=True, help="Path to CWE XML file (e.g. 699.xml)")
     parser.add_argument("--lang", choices=["cpp", "java", "python", "go", "js"], default="cpp", help="Target codebase language")
-    parser.add_argument("--output", required=True, help="Output JSON path")
+    parser.add_argument("--project", default=None, help="Target project (to write catalog into <project>/.audit_workspace/catalog.json)")
+    parser.add_argument("--output", default=None, help="Output JSON path (default: <project>/.audit_workspace/catalog.json)")
     return parser.parse_args()
 
 def get_language_aliases(lang):
@@ -140,14 +141,22 @@ def parse_xml(xml_path, target_lang):
 def main():
     args = setup_args()
     catalog = parse_xml(args.cwe, args.lang)
-    
-    output_dir = os.path.dirname(args.output)
+
+    output = args.output
+    if not output:
+        if not args.project:
+            print("Error: need --output, or --project to derive default workspace path.", file=sys.stderr)
+            sys.exit(1)
+        from src.common import paths
+        output = paths.catalog_path(args.project)
+
+    output_dir = os.path.dirname(output)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
-        
-    with open(args.output, "w", encoding="utf-8") as f:
+
+    with open(output, "w", encoding="utf-8") as f:
         json.dump(catalog, f, indent=2, ensure_ascii=False)
-    print(f"Saved catalog to: {args.output}")
+    print(f"Saved catalog to: {output}")
 
 if __name__ == "__main__":
     main()

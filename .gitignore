@@ -2,8 +2,13 @@
 __pycache__/
 *.pyc
 
-# 运行产物(每次审计生成,不入库)
+# 运行产物(每次审计生成,不入库)。产物现统一落在 <目标项目>/.audit_workspace/,
+# skill/resources 只应有配置(699.xml, prescan_rules.json)。以下为历史遗留产物防护。
 resources/audit_plan.json
+resources/cwe_699_catalog.json
+resources/catalog.json
 resources/pending_prompts.json
 resources/pending_prompts_simple.json
+.audit_workspace/
+.audit_temp/
 *.bak
