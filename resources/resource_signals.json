@@ -1,0 +1,10 @@
+{
+  "_comment": "资源访问信号词,按语言分桶(评估 2.3:硬编码混语言会给 Go/C 引噪声)。P2-a 第三路召回对逻辑漏洞类 CWE,用这些词经 codegraph query 抓'按传入标识访问资源'的函数——越权高发区。_common 对所有语言生效。explorer 按 target_lang 取 _common + 对应语言桶;未知语言仅用 _common。",
+  "_common": ["findById", "find_by_id", "get_by_id", "getById", "findOne", "fetch_by_id"],
+  "python": ["objects.get", "objects.filter", "query.get", "session.query", "db.session", "cursor.execute", "request.args", "request.form", "request.json", "get_object_or_404", "user_id", "owner"],
+  "java": ["@PathVariable", "@RequestParam", "repository.find", "findById", "getById", "EntityManager", "request.getParameter", "@RequestBody"],
+  "js": ["req.params", "req.query", "req.body", "findById", "findOne", "prisma.", "sequelize", "knex", "ctx.params"],
+  "go": ["QueryRow", "db.Find", "db.First", "db.Where", "c.Param", "c.Query", "r.FormValue", "mux.Vars", "gorm"],
+  "cpp": ["get_by_id", "find_by_id", "lookup", "fetch", "load"],
+  "c": ["get_by_id", "find_by_id", "lookup", "fetch"]
+}

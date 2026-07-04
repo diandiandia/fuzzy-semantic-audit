@@ -25,13 +25,24 @@ LOGIC_FLAW_CWES = {
     "862", "863", "913", "917", "1220",
 }
 
-# 资源访问信号词:函数体里出现这些,通常意味着"按调用方传入的标识访问资源"——越权高发区。
-RESOURCE_ACCESS_SIGNALS = [
-    "findById", "findOne", "find_by_id", "get_by_id", "getById", "load", "fetch",
-    "req.params", "req.query", "req.body", "@PathVariable", "@RequestParam",
-    "user_id", "userId", "account", "order", "resource", "owner", "session",
-    "SELECT", "query(", "cursor.execute", "objects.get", "open(", "read(",
-]
+# 资源访问信号词:外置到 resources/resource_signals.json 并按语言分桶(评估 2.3:
+# 硬编码混语言会给 Go/C 引噪声)。用 _common + target_lang 对应桶;未知语言仅 _common。
+_SIGNALS_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "resources", "resource_signals.json")
+_FALLBACK_SIGNALS = ["findById", "find_by_id", "get_by_id", "getById", "findOne", "fetch_by_id"]
+
+def load_resource_signals(target_lang):
+    try:
+        with open(os.path.abspath(_SIGNALS_PATH), "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"Warning: failed to load resource_signals.json ({e}); using built-in fallback.", file=sys.stderr)
+        return list(_FALLBACK_SIGNALS)
+    lang = (target_lang or "").lower()
+    if lang in ("typescript", "ts", "javascript"):
+        lang = "js"
+    signals = list(data.get("_common", []))
+    signals += data.get(lang, [])
+    return signals or list(_FALLBACK_SIGNALS)
 
 def check_codegraph_index(project_path):
     print("Checking CodeGraph index status...")
@@ -156,14 +167,15 @@ def is_boilerplate_or_test(file_path, func_name, code_snippet, target_lang):
 
     return False
 
-def resource_access_recall(project_path, recalled_symbols, limit=40):
+def resource_access_recall(project_path, recalled_symbols, signals, limit=40):
     """P2-a 第三路召回:抓所有"按传入标识访问资源"的函数(越权高发区)。
 
-    确定性、不烧 token:用资源访问信号词走 codegraph query,命中的函数标记 source="resource"。
-    仅对逻辑漏洞类 CWE 调用(见 LOGIC_FLAW_CWES)。limit 是确定性闸门,防候选池失控。
+    确定性、不烧 token:用语言相关的资源访问信号词(signals)走 codegraph query,
+    命中的函数标记 source="resource"。仅对逻辑漏洞类 CWE 调用(见 LOGIC_FLAW_CWES)。
+    limit 是确定性闸门,防候选池失控。
     """
     added = 0
-    for signal in RESOURCE_ACCESS_SIGNALS:
+    for signal in signals:
         if added >= limit:
             break
         lex_results = run_codegraph_query(signal, project_path)
@@ -197,7 +209,7 @@ def adaptive_vector_topk(index_size):
         return 30
     return max(5, min(30, round(index_size * 0.05)))
 
-def process_task(task, project_path, target_lang, max_candidates, vec_topk=30, vec_min_score=0.0):
+def process_task(task, project_path, target_lang, max_candidates, vec_topk=30, vec_min_score=0.0, resource_signals=None):
     cwe_id = task["cwe_id"]
     cwe_name = task["cwe_name"]
     cwe_desc = task["description"]
@@ -240,8 +252,8 @@ def process_task(task, project_path, target_lang, max_candidates, vec_topk=30, v
                     recalled_symbols[name]["source"] = "both"
 
     # C. Resource-Access Recall (P2-a): 仅对逻辑漏洞类 CWE 开启,补召回"缺失校验"型越权。
-    if cwe_id in LOGIC_FLAW_CWES:
-        n = resource_access_recall(project_path, recalled_symbols)
+    if cwe_id in LOGIC_FLAW_CWES and resource_signals:
+        n = resource_access_recall(project_path, recalled_symbols, resource_signals)
         if n:
             print(f"[+] CWE-{cwe_id}: resource-access recall added {n} candidate functions.")
 
@@ -349,12 +361,16 @@ def main():
     vec_min_score = args.vec_min_score
     print(f"Vector index has {idx_n} functions → adaptive top_k={vec_topk}, min_score={vec_min_score}")
 
+    # 语言相关的资源访问信号词(P2-a 第三路召回用,评估 2.3 外置多语言隔离)
+    resource_signals = load_resource_signals(target_lang)
+    print(f"Resource-access signals for '{target_lang}': {len(resource_signals)} terms")
+
     print(f"Exploring {len(tasks)} tasks using ThreadPoolExecutor...")
 
     all_exported_cands = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-        futures = {executor.submit(process_task, task, project_path, target_lang, args.max_candidates, vec_topk, vec_min_score): task for task in tasks}
+        futures = {executor.submit(process_task, task, project_path, target_lang, args.max_candidates, vec_topk, vec_min_score, resource_signals): task for task in tasks}
         
         for future in concurrent.futures.as_completed(futures):
             try:
