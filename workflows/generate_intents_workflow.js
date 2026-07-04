@@ -34,10 +34,11 @@ const TODO_SCHEMA = {
 
 const INTENT_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['queryIntents', 'vulnerabilityPrompt'],
+  required: ['queryIntents', 'vulnerabilityPrompt', 'allCwes'],
   properties: {
     queryIntents: { type: 'array', minItems: 3, maxItems: 6, items: { type: 'string' } },
     vulnerabilityPrompt: { type: 'string' },
+    allCwes: { type: 'array', items: { type: 'string' } },
   },
 }
 
@@ -77,7 +78,8 @@ async function run() {
         `Run this exact shell command with the Bash tool (cwd ${REPO}) to write intents back:\n` +
         `${PY} -m src.m3_locate.intent_generator update --plan ${PLAN} --task-id ${task.id} ` +
         `--intents ${JSON.stringify(JSON.stringify(intents.queryIntents))} ` +
-        `--vuln-prompt ${JSON.stringify(intents.vulnerabilityPrompt)}\n` +
+        `--vuln-prompt ${JSON.stringify(intents.vulnerabilityPrompt)} ` +
+        `--all-cwes ${JSON.stringify(JSON.stringify(intents.allCwes))}\n` +
         `Report the exit status only.`,
         { label: `write:${task.cweId}`, phase: 'Generate' }
       )

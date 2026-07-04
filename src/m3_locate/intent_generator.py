@@ -57,6 +57,12 @@ def cmd_update(args):
         sys.exit(1)
     intents = [str(x) for x in intents]
 
+    all_cwes = json.loads(args.all_cwes) if args.all_cwes else []
+    if not isinstance(all_cwes, list):
+        print("Error: --all-cwes must be a JSON array.", file=sys.stderr)
+        sys.exit(1)
+    all_cwes = [str(x) for x in all_cwes]
+
     found = False
     for task in plan.get("tasks", []):
         if task["id"] == args.task_id:
@@ -65,6 +71,7 @@ def cmd_update(args):
             task["query_intents"] = intents
             if args.vuln_prompt is not None:
                 task["vulnerability_prompt"] = args.vuln_prompt
+            task["all_cwes"] = all_cwes
             found = True
             break
     if not found:
@@ -87,6 +94,7 @@ def main():
     p_upd.add_argument("--task-id", required=True, dest="task_id")
     p_upd.add_argument("--intents", help="JSON array of semantic query intent strings")
     p_upd.add_argument("--vuln-prompt", dest="vuln_prompt", help="Customized vulnerability scanning prompt")
+    p_upd.add_argument("--all-cwes", dest="all_cwes", help="JSON array of all applicable CWE ID strings")
 
     args = parser.parse_args()
     if args.command == "list":
