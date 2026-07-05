@@ -80,7 +80,7 @@ async function run() {
   phase('Intents')
   // Step 4: Delegate to intents generation sub-workflow
   log('Generating semantic intents...')
-  await workflow('fuzzy-semantic-intents', { planPath: planPath, repoRoot: SKILL, venvPython: PY })
+  await workflow('fuzzy-semantic-intents', { planPath: planPath, repoRoot: SKILL, venvPython: PY, targetLanguage: detectedLang })
 
   phase('Explore')
   // Step 5: Run explorer double/triple-road recall

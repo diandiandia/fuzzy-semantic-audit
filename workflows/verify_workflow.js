@@ -31,16 +31,26 @@ if (!PLAN || !CAND_DIR || !REPO || !PROJECT) {
 const VERDICT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['isReal', 'confidence', 'lens', 'reason', 'attackPath', 'missingEvidence'],
+  required: ['isReal', 'confidence', 'lens', 'reason', 'hasConcreteAttackPath', 'attackPath', 'hasMissingEvidence', 'missingEvidence'],
   properties: {
     isReal: { type: 'boolean' },
     confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
     lens: { type: 'string', enum: ['reachability', 'guard', 'exploit'] },
     reason: { type: 'string' },
+    hasConcreteAttackPath: { type: 'boolean' },
     attackPath: { type: 'string' },      // 'None' if not applicable
+    hasMissingEvidence: { type: 'boolean' },
     missingEvidence: { type: 'string' }, // 'None' if none
   },
 }
+
+// P2-a 召回与校验增强:逻辑漏洞类 CWE (越权/授权/信任边界/会话/资源访问控制)
+const LOGIC_FLAW_CWES = [
+  "266", "269", "276", "280", "284", "285", "286", "287", "288", "290", "294",
+  "306", "346", "352", "359", "362", "384", "425", "441", "552",
+  "601", "639", "640", "708", "732", "749", "770", "807", "836",
+  "862", "863", "913", "917", "1220"
+]
 
 const PENDING_SCHEMA = {
   type: 'object',
@@ -91,7 +101,8 @@ Return the required JSON containing 'severity' and 'reason'.`
 const PKG_FIELDS = 'It contains cwe_id, cwe_name, file, function, code_snippet, struct_definitions, call_chain_context (upstream callers + downstream callees), and entrypoint_candidate.'
 const USE_CHAIN = 'IMPORTANT: reason over the call_chain_context, not just the single function — logic flaws live in the cross-function data flow.'
 
-function reachabilityPrompt(pkgPath) {
+function reachabilityPrompt(pkgPath, cweId) {
+  const isLogic = LOGIC_FLAW_CWES.includes(String(cweId));
   return `You are Referee 1 — PATH REACHABILITY & TRUST BOUNDARY.
 Read the candidate package JSON at: ${pkgPath} (use the Read tool). ${PKG_FIELDS}
 ${USE_CHAIN}
@@ -100,42 +111,48 @@ Rules:
 1. Use the UPSTREAM callers in call_chain_context: does any caller trace back to an external entry point? If yes, isReal may be true.
 2. Trust-boundary check: is data assumed internal-only actually reachable from an external caller per the chain? That itself is a finding.
 3. If the entrypoint is unknown, a unit test, or only a reachability hint of "low", assume NOT reachable (isReal=false).
-UNIVERSAL CHECK: The matched CWE tags may be incomplete. Independent of the listed CWEs, assess: can any parameter or size cause a memory read/write outside intended bounds? Can any integer operation wrap? Is there a path where preconditions are not met?
-Return the required JSON. lens must be "reachability". attackPath = external-input-to-function path if reachable, else "None". missingEvidence = what context is missing, else "None".`
+UNIVERSAL CHECK: The matched CWE tags may be incomplete. Independent of the listed CWEs, assess: ${isLogic ? "can external untrusted input reach this logical gate without any prior authentication check?" : "can any parameter or size cause a memory read/write outside intended bounds? Can any integer operation wrap? Is there a path where preconditions are not met?"}
+Return the required JSON. lens must be "reachability".
+Set hasConcreteAttackPath = true if reachable, else false. If true, set attackPath = external-input-to-function path, else "None".
+Set hasMissingEvidence = true if context is missing, else false. If true, set missingEvidence = what context is missing, else "None".`
 }
-function guardPrompt(pkgPath) {
+function guardPrompt(pkgPath, cweId) {
+  const isLogic = LOGIC_FLAW_CWES.includes(String(cweId));
   return `You are Referee 2 — GUARD VALIDITY & MISSING AUTHORIZATION.
 Read the candidate package JSON at: ${pkgPath} (use the Read tool). ${PKG_FIELDS}
 ${USE_CHAIN}
 Default stance: FALSIFY. Unless you can prove a guard is missing, wrong, or bypassable ON THIS PATH, assume guards are VALID and the bug is mitigated (isReal=false).
 Rules:
 1. Identify bounds checks, size limits, auth checks, state assertions, locks in the function AND its callers.
-2. Missing-authorization (BOLA/IDOR) lens: if the function acts on a caller-supplied id/key/path, verify an ownership/permission check exists ON THIS CALL PATH. A check existing elsewhere does NOT count. If none on-path, isReal=true.
+2. ${isLogic ? "Missing-authorization (BOLA/IDOR) lens: if the function acts on a caller-supplied id/key/path, verify an ownership/permission check exists ON THIS CALL PATH. A check existing elsewhere does NOT count. If none on-path, isReal=true." : "Bounds/Type safety lens: Verify if parameters, array indices, or buffer lengths are validated before memory or computation operations."}
 3. Only set isReal=true if a malicious input can concretely bypass, or if a required guard is provably absent on the reachable path.
-UNIVERSAL CHECK: The matched CWE tags may be incomplete. Independent of the listed CWEs, assess: can any parameter or size cause a memory read/write outside intended bounds? Can any integer operation wrap? Is there a path where preconditions are not met?
-Return the required JSON. lens must be "guard". attackPath = how to bypass / what unauthorized access is possible, else "None". missingEvidence = what context is missing, else "None".`
+UNIVERSAL CHECK: The matched CWE tags may be incomplete. Independent of the listed CWEs, assess: ${isLogic ? "is there any bypass or absence of user/object ownership permission checks on this path?" : "can any parameter or size cause a memory read/write outside intended bounds? Can any integer operation wrap? There is a path where preconditions are not met?"}
+Return the required JSON. lens must be "guard".
+Set hasConcreteAttackPath = true if a guard bypass is possible, else false. If true, set attackPath = how to bypass / what unauthorized access is possible, else "None".
+Set hasMissingEvidence = true if context is missing, else false. If true, set missingEvidence = what context is missing, else "None".`
 }
-function exploitPrompt(pkgPath) {
+function exploitPrompt(pkgPath, cweId) {
+  const isLogic = LOGIC_FLAW_CWES.includes(String(cweId));
   return `You are Referee 3 — EXPLOITABILITY (control flow, state machine, race).
 Read the candidate package JSON at: ${pkgPath} (use the Read tool). ${PKG_FIELDS}
 ${USE_CHAIN}
 Default stance: FALSIFY exploitability. Unless you can trace a concrete control flow that triggers the flaw under untrusted input, assume NOT exploitable (isReal=false).
 Rules:
 1. Does the snippet actually contain the vulnerability logic matching the CWE (memory corruption OR a logic flaw)?
-2. State-machine bypass: can a required prior step (payment/validation/auth) be skipped by calling this directly or reordering calls, given the upstream callers?
-3. TOCTOU/race: is there a check-then-use gap on shared/filesystem state that a concurrent attacker can win?
-4. Trace tainted variables source→sink across the chain. Provide a concrete trigger/step sequence ONLY if one exists.
-UNIVERSAL CHECK: The matched CWE tags may be incomplete. Independent of the listed CWEs, assess: can any parameter or size cause a memory read/write outside intended bounds? Can any integer operation wrap? Can a pointer be used after free? Can a null pointer be dereferenced?
-Return the required JSON. lens must be "exploit". attackPath = concrete step-by-step trigger, else "None". missingEvidence = what context is missing, else "None".`
+2. ${isLogic ? "State-machine bypass: can a required prior step (payment/validation/auth) be skipped by calling this directly or reordering calls, given the upstream callers?" : "TOCTOU/race: is there a check-then-use gap on shared/filesystem state that a concurrent attacker can win?"}
+3. ${isLogic ? "API parameter manipulation: can an attacker manipulate user-controlled input/identifiers (like user_id, order_id) to access or modify resources belonging to others?" : "Trace tainted variables source→sink across the chain. Provide a concrete trigger/step sequence ONLY if one exists."}
+UNIVERSAL CHECK: The matched CWE tags may be incomplete. Independent of the listed CWEs, assess: ${isLogic ? "can an attacker manipulate parameters or skip steps to achieve unauthorized access or state bypass?" : "can any parameter or size cause a memory read/write outside intended bounds? Can any integer operation wrap? Can a pointer be used after free? Can a null pointer be dereferenced?"}
+Return the required JSON. lens must be "exploit".
+Set hasConcreteAttackPath = true if exploitable, else false. If true, set attackPath = concrete step-by-step trigger / API manipulation steps, else "None".
+Set hasMissingEvidence = true if context is missing, else false. If true, set missingEvidence = what context is missing, else "None".`
 }
 
 // ---- three-bucket triage (deterministic; System Design §4.3 / §12, asymmetric) ----
 function triage(votes) {
   const v = votes.filter(Boolean)
   const trueVotes = v.filter(x => x.isReal === true).length
-  const isRealPath = s => s && s !== 'None' && s !== '无'
-  const hasAttackPath = v.some(x => x.isReal === true && isRealPath(x.attackPath))
-  const hasMissing = v.some(x => isRealPath(x.missingEvidence))
+  const hasAttackPath = v.some(x => x.isReal === true && x.hasConcreteAttackPath === true)
+  const hasMissing = v.some(x => x.hasMissingEvidence === true)
 
   if (trueVotes >= 2 && hasAttackPath) return 'verified'
   if (trueVotes >= 1 || hasMissing) return 'needs_review' // asymmetric: favor no false-negatives
@@ -197,9 +214,9 @@ async function run() {
       }
       
       const votes = await parallel([
-        () => agent(reachabilityPrompt(`${CAND_DIR}/${t.candidateId}.json`), { label: `reach:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
-        () => agent(guardPrompt(`${CAND_DIR}/${t.candidateId}.json`), { label: `guard:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
-        () => agent(exploitPrompt(`${CAND_DIR}/${t.candidateId}.json`), { label: `exploit:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
+        () => agent(reachabilityPrompt(`${CAND_DIR}/${t.candidateId}.json`, t.cweId), { label: `reach:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
+        () => agent(guardPrompt(`${CAND_DIR}/${t.candidateId}.json`, t.cweId), { label: `guard:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
+        () => agent(exploitPrompt(`${CAND_DIR}/${t.candidateId}.json`, t.cweId), { label: `exploit:${t.candidateId}`, phase: 'Verify', schema: VERDICT_SCHEMA }),
       ])
       return { target: t, skipped: false, votes: votes.filter(Boolean) }
     },

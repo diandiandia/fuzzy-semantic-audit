@@ -58,7 +58,8 @@ async function run() {
     todo,
     // stage 1: author intents (judgment → agent)
     (t) => agent(
-      `You are a security auditor building a semantic vector-search index for CWE-${t.cweId}: ${t.cweName}.\n` +
+      `You are a security auditor building a semantic vector-search index for a project written in ${A.targetLanguage || 'the target language'} targeting CWE-${t.cweId}: ${t.cweName}.\n` +
+      `Constraint: ONLY generate search queries (queryIntents) that are syntactically and semantically relevant to ${A.targetLanguage || 'the target language'}. Do NOT generate memory-management queries (like buffer overflow or double free) if the language is memory-safe (like Python/JavaScript/Java) unless the CWE specifically targets native bindings.\n` +
       `CWE description: ${t.description}\n\n` +
 `Produce:\n` +
 `1. queryIntents — 3 to 5 natural-language search queries describing the code patterns/operations/bug shapes for this CWE. ` +
