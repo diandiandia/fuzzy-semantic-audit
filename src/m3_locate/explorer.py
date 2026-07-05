@@ -25,9 +25,6 @@ LOGIC_FLAW_CWES = {
     "862", "863", "913", "917", "1220",
 }
 
-def load_resource_signals(target_lang):
-    """从 languages.json 获取资源访问信号词(并集)。"""
-    return get_resource_signals(target_lang)
 
 def check_codegraph_index(project_path):
     print("Checking CodeGraph index status...")
@@ -54,9 +51,6 @@ def run_codegraph_query(query, project_path):
     except Exception:
         return []
 
-# 按语言的类型/结构名提取策略。目标:从函数源码里挑出"值得回查定义的类型名",
-# 再用 codegraph 拉其定义作为裁判的结构上下文。C/C++ 特化的 `_t`/struct 正则对
-# Python/Go/JS 无意义,故按语言分派;未知语言返回空集(不提取,避免噪声)。
 # 各语言都会命中的通用关键字/内建类型噪声,统一过滤。
 _IGNORED_TYPE_NAMES = {
     "const", "void", "int", "char", "float", "double", "bool", "std", "string",
@@ -66,6 +60,9 @@ _IGNORED_TYPE_NAMES = {
     "True", "False", "self", "error", "nil",
 }
 
+# 按语言的类型/结构名提取策略。目标:从函数源码里挑出"值得回查定义的类型名",
+# 再用 codegraph 拉其定义作为裁判的结构上下文。C/C++ 特化的 `_t`/struct 正则对
+# Python/Go/JS 无意义,故按语言分派;未知语言返回空集(不提取,避免噪声)。
 def _candidate_type_names(source_code, target_lang):
     """按语言从源码里挑出候选类型名。"""
     norm = get_norm_lang(target_lang)
@@ -362,7 +359,7 @@ def main():
     print(f"Vector index has {idx_n} functions → adaptive top_k={vec_topk}, min_score={vec_min_score}")
 
     # 语言相关的资源访问信号词(P2-a 第三路召回用,评估 2.3 外置多语言隔离)
-    resource_signals = load_resource_signals(target_lang)
+    resource_signals = get_resource_signals(target_lang)
     print(f"Resource-access signals for '{target_lang}': {len(resource_signals)} terms")
 
     print(f"Exploring {len(tasks)} tasks using ThreadPoolExecutor...")

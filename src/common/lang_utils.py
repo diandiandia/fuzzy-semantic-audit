@@ -73,10 +73,13 @@ def get_type_kinds(target_lang):
     return TYPE_KINDS.get(norm, [])
 
 def get_resource_signals(target_lang):
-    """返回指定语言专属信号词与通用信号词的并集。"""
+    """返回指定语言专属信号词与通用信号词的并集(保持 _common 优先的原顺序并去重)。"""
     norm = get_norm_lang(target_lang)
-    sig = set(RESOURCE_SIGNALS.get(norm, []))
-    sig.update(COMMON_RESOURCE_SIGNALS)
-    return sorted(list(sig))
+    seen, out = set(), []
+    for s in list(COMMON_RESOURCE_SIGNALS) + RESOURCE_SIGNALS.get(norm, []):
+        if s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
 
 
