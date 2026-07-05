@@ -51,7 +51,7 @@
 - **来源**:`cwe_parser.py`(已验证)。逻辑移植,接口不变。
 - **输入**:`699.xml` + `--lang`
 - **输出**:`cwe_catalog.json`(dict: cwe_id → {id,name,description,extended_description,consequences,languages})
-- **不变式**:catalog 只含目标语言适用的 CWE。
+- **不变式**:catalog 只含目标语言适用的 CWE;`--lang` 不再限定取值,未知语言(如 rust/php)降级为仅保留 language-independent 弱点并告警,而非报错退出。
 
 ### M2 — 索引 / 检索层 ★新增(P0 核心)
 系统设计 §9/§11 实测确定的**双通道**,本模块是新增重点。
