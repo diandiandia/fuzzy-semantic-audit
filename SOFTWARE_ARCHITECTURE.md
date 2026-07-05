@@ -177,7 +177,11 @@
 ```jsonc
 { "isReal": bool, "confidence": "high|medium|low",
   "lens": "reachability|guard|exploit",
-  "reason": str, "attackPath": str /* 无则填"无" */ }
+  "reason": str, 
+  "hasConcreteAttackPath": bool,
+  "attackPath": str, /* 无则填"None" */
+  "hasMissingEvidence": bool,
+  "missingEvidence": str /* 无则填"None" */ }
 ```
 
 ### 3.4 安全评级输出 schema (M4 stageB1, 新增)

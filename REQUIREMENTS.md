@@ -63,18 +63,18 @@ This document details the system requirements (Functional, Verification, and Ope
 *   **Design Brief**: Satisfied by Stage B1 in [verify_workflow.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/verify_workflow.js) calling a severity agent. Candidates below `SEV_THRESHOLD` (default 5) are automatically triaged as `false_positive` without invoking the expensive referee stage.
 
 ### REQ-VER-002: Three-Perspective Adversarial Verification
-*   **Description**: High-severity candidates must be analyzed by three independent LLM referees from three distinct perspectives with a default-falsification stance.
-*   **Design Brief**: Satisfied by Stage B2 in [verify_workflow.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/verify_workflow.js), executing three parallel agents:
+*   **Description**: High-severity candidates must be analyzed by three independent LLM referees from three distinct perspectives with a default-falsification stance. The referee instructions must be dynamically tailored based on the target CWE type (Logic flaw vs Memory vulnerability) to avoid analysis mismatch.
+*   **Design Brief**: Satisfied by Stage B2 in [verify_workflow.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/verify_workflow.js), executing three parallel agents with cweId-specific dynamic prompts:
     1.  **Referee 1**: Path Reachability (external input tracing).
-    2.  **Referee 2**: Guard Validity (checking if constraints/defense logic can be bypassed).
-    3.  **Referee 3**: Exploitability (proving control-flow state changes or memory corruption).
+    2.  **Referee 2**: Guard Validity (checking if constraints/defense logic can be bypassed, enforcing BOLA/IDOR on logical CWEs, and memory bounds checks on memory CWEs).
+    3.  **Referee 3**: Exploitability (proving control-flow state changes / API parameter manipulation on logical CWEs, and memory corruption on memory CWEs).
 
 ### REQ-VER-003: Asymmetric Three-Bucket Triage
-*   **Description**: Candidates must be triaged into three buckets (verified, needs_review, false_positive) using asymmetric voting rules to prevent false negatives.
+*   **Description**: Candidates must be triaged into three buckets (verified, needs_review, false_positive) using asymmetric voting rules to prevent false negatives. The triage logic must rely on robust boolean status flags from the referees to prevent string-parsing fragility.
 *   **Design Brief**: Satisfied by the `triage` function in [verify_workflow.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/verify_workflow.js):
-    *   `verified`: $\ge$ 2 votes of true vulnerability **and** a concrete `attackPath`.
-    *   `needs_review`: $\ge$ 1 vote or any `missingEvidence`.
-    *   `false_positive`: 3 votes for dismissal.
+    *   `verified`: $\ge$ 2 votes of true vulnerability **and** `hasConcreteAttackPath` is true.
+    *   `needs_review`: $\ge$ 1 vote or `hasMissingEvidence` is true.
+    *   `false_positive`: 3 votes for dismissal and no missing evidence.
 
 ### REQ-VER-004: Caller Context Enrichment
 *   **Description**: To audit logical weaknesses, candidate functions must carry context about their call chains, including code snippets of their closest callers.

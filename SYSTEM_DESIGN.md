@@ -163,14 +163,16 @@ verdict:false_positive(误报):   11
 {
   "isReal": true,
   "confidence": "high | medium | low",
-  "lens": "reachability | guard | exploitability",
+  "lens": "reachability | guard | exploit",
   "reason": "为什么真/假的推理",
-  "attackPath": "如果真:从外部入口到触发点的可复现步骤",
-  "missingEvidence": "如果不确定:还差什么信息才能定论"
+  "hasConcreteAttackPath": true,
+  "attackPath": "如果真:从外部入口到触发点的可复现步骤, 否则为 'None'",
+  "hasMissingEvidence": false,
+  "missingEvidence": "如果不确定:还差什么信息才能定论, 否则为 'None'"
 }
 ```
-- `attackPath` 是强过滤器:给不出攻击路径的"漏洞"基本是假阳性。
-- `missingEvidence` 非空 → 进"待人工"桶,而非误判为已排除。
+- `hasConcreteAttackPath` 作为强过滤器: 给不出攻击路径的"漏洞"（该值为 false）基本是假阳性。
+- `hasMissingEvidence` 为 true → 进"待人工"桶,而非误判为已排除。
 
 ---
 
