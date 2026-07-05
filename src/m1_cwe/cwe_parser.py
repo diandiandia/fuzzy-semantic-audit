@@ -8,7 +8,9 @@ import os
 def setup_args():
     parser = argparse.ArgumentParser(description="CWE-699 XML Catalog Parser & Pruner")
     parser.add_argument("--cwe", required=True, help="Path to CWE XML file (e.g. 699.xml)")
-    parser.add_argument("--lang", choices=["cpp", "java", "python", "go", "js", "all"], default="cpp", help="Target codebase language")
+    parser.add_argument("--lang", default="cpp",
+                        help="Target codebase language (known: cpp/java/python/go/js/all; "
+                             "unknown languages degrade to language-independent weaknesses only)")
     parser.add_argument("--project", default=None, help="Target project (to write catalog into <project>/.audit_workspace/catalog.json)")
     parser.add_argument("--output", default=None, help="Output JSON path (default: <project>/.audit_workspace/catalog.json)")
     return parser.parse_args()
@@ -21,7 +23,12 @@ def get_language_aliases(lang):
         "go": ["Go", "Not Language-Specific", "Language-Independent"],
         "js": ["JavaScript", "Not Language-Specific", "Language-Independent"]
     }
-    return mapping.get(lang, ["Not Language-Specific"])
+    if lang not in mapping and lang != "all":
+        # 未知语言(如 rust/php/swift/ruby)不再硬拒:与 explorer/detect_language 的宽容降级对齐,
+        # 仅保留"非语言特定 / 语言无关"的弱点,并显式告警(风格同 explorer.py 的未知语言提示)。
+        print(f"[!] Unknown --lang '{lang}': retaining only language-independent weaknesses. "
+              f"Known languages: cpp/java/python/go/js.", file=sys.stderr)
+    return mapping.get(lang, ["Not Language-Specific", "Language-Independent"])
 
 def parse_xml(xml_path, target_lang):
     if not os.path.exists(xml_path):
