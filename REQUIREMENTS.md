@@ -26,7 +26,7 @@ This document details the system requirements (Functional, Verification, and Ope
 
 ### REQ-REC-002: Logical Vulnerability Resource Recall
 *   **Description**: The system must open a third recall road specifically targeting logical weaknesses (e.g., IDOR, BOLA, missing authorization) by harvesting functions that access resources using user-controlled parameters.
-*   **Design Brief**: Satisfied by `explorer.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/explorer.py)) for CWE IDs belonging to `LOGIC_FLAW_CWES`. It matches per-language resource access patterns (e.g., `findById`, `get_by_id`) configured in `resource_signals.json`.
+*   **Design Brief**: Satisfied by `explorer.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/explorer.py)) for CWE IDs belonging to `LOGIC_FLAW_CWES`. It matches per-language resource access patterns (e.g., `findById`, `get_by_id`) configured in the unified `languages.json` config.
 
 ### REQ-REC-004: Usages-based Ripgrep Fallback Recall
 *   **Description**: The candidate explorer must support usage-based signal recall by searching for references of signals (including regexes and chain properties like objects.filter) and identifying their enclosing functions to bypass definition-only query limits.

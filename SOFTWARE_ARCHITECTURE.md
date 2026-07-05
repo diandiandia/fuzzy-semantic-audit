@@ -199,7 +199,7 @@ fuzzy-semantic-audit/
 ├── resources/
 │   ├── 699.xml
 │   ├── prescan_rules.json        # ★P0:外置技术栈预扫描规则
-│   └── resource_signals.json     # ★P2-a:按语言分桶的资源访问信号词
+│   └── languages.json            # ★P2-a:按语言分桶的统一语言配置(含类型种类与资源访问信号词)
 ├── src/
 │   ├── common/                   # plan_manager(读写)+ ★lang_utils(P0 语言映射)
 │   ├── m1_cwe/                   # cwe_parser:CWE解析裁剪

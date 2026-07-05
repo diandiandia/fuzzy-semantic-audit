@@ -1,0 +1,64 @@
+{
+  "languages": {
+    "cpp": {
+      "markdown_tag": "cpp",
+      "extensions": [".c", ".h", ".cpp", ".hpp", ".cc"],
+      "cwe_aliases": ["C++", "C", "Not Language-Specific", "Language-Independent"],
+      "type_kinds": ["struct", "class", "enum", "union", "typedef"],
+      "resource_signals": ["get_by_id", "find_by_id", "lookup", "fetch", "load"]
+    },
+    "c": {
+      "markdown_tag": "c",
+      "extensions": [".c", ".h"],
+      "cwe_aliases": ["C++", "C", "Not Language-Specific", "Language-Independent"],
+      "type_kinds": ["struct", "enum", "union", "typedef"],
+      "resource_signals": ["get_by_id", "find_by_id", "lookup", "fetch"]
+    },
+    "java": {
+      "markdown_tag": "java",
+      "extensions": [".java"],
+      "cwe_aliases": ["Java", "Not Language-Specific", "Language-Independent"],
+      "type_kinds": ["class", "interface", "enum", "record"],
+      "resource_signals": ["@PathVariable", "@RequestParam", "findById", "getById", "EntityManager", "getParameter", "@RequestBody", "Repository\\.(findById|getById)\\(", "Session\\.get\\("]
+    },
+    "python": {
+      "markdown_tag": "python",
+      "extensions": [".py"],
+      "cwe_aliases": ["Python", "Not Language-Specific", "Language-Independent"],
+      "type_kinds": ["class"],
+      "resource_signals": ["get_object_or_404", "filter_by", "user_id", "owner", "query_paginate", "execute", "objects\\.(get|filter|first)\\("]
+    },
+    "go": {
+      "markdown_tag": "go",
+      "extensions": [".go"],
+      "cwe_aliases": ["Go", "Not Language-Specific", "Language-Independent"],
+      "type_kinds": ["struct", "interface", "type"],
+      "resource_signals": ["QueryRow", "Find", "First", "Where", "FormValue", "gorm", "db\\.(Where|First|Find)\\("]
+    },
+    "js": {
+      "markdown_tag": "javascript",
+      "extensions": [".js", ".ts"],
+      "cwe_aliases": ["JavaScript", "Not Language-Specific", "Language-Independent"],
+      "type_kinds": ["class", "interface", "type"],
+      "resource_signals": ["findById", "findOne", "sequelize", "knex", "params", "query", "body", "db\\.(select|insert|update|where)\\(", "Model\\.(findOne|findAll)\\("]
+    }
+  },
+  "aliases": {
+    "typescript": "js",
+    "ts": "js",
+    "javascript": "js"
+  },
+  "ext_to_lang": {
+    ".cpp": "cpp",
+    ".hpp": "cpp",
+    ".cc": "cpp",
+    ".c": "cpp",
+    ".h": "cpp",
+    ".java": "java",
+    ".py": "python",
+    ".go": "go",
+    ".js": "js",
+    ".ts": "js"
+  },
+  "_common_resource_signals": ["findById", "find_by_id", "get_by_id", "getById", "findOne", "fetch_by_id"]
+}

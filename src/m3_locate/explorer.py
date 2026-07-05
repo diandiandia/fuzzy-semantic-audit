@@ -7,7 +7,7 @@ import concurrent.futures
 import sys
 
 from src.common.plan_manager import load_plan, save_plan
-from src.common.lang_utils import extensions_for, LANG_EXTENSIONS, DEFAULT_LANG
+from src.common.lang_utils import extensions_for, LANG_EXTENSIONS, DEFAULT_LANG, get_resource_signals, get_type_kinds, get_norm_lang
 from src.common import paths
 from src.m2_index import vector_index
 from src.m2_index.codegraph_wrapper import get_source, get_callers, reachability_hint, build_call_chain_context, find_usages_enclosing_functions
@@ -25,24 +25,9 @@ LOGIC_FLAW_CWES = {
     "862", "863", "913", "917", "1220",
 }
 
-# 资源访问信号词:外置到 resources/resource_signals.json 并按语言分桶(评估 2.3:
-# 硬编码混语言会给 Go/C 引噪声)。用 _common + target_lang 对应桶;未知语言仅 _common。
-_SIGNALS_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "resources", "resource_signals.json")
-_FALLBACK_SIGNALS = ["findById", "find_by_id", "get_by_id", "getById", "findOne", "fetch_by_id"]
-
 def load_resource_signals(target_lang):
-    try:
-        with open(os.path.abspath(_SIGNALS_PATH), "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as e:
-        print(f"Warning: failed to load resource_signals.json ({e}); using built-in fallback.", file=sys.stderr)
-        return list(_FALLBACK_SIGNALS)
-    lang = (target_lang or "").lower()
-    if lang in ("typescript", "ts", "javascript"):
-        lang = "js"
-    signals = list(data.get("_common", []))
-    signals += data.get(lang, [])
-    return signals or list(_FALLBACK_SIGNALS)
+    """从 languages.json 获取资源访问信号词(并集)。"""
+    return get_resource_signals(target_lang)
 
 def check_codegraph_index(project_path):
     print("Checking CodeGraph index status...")
@@ -72,15 +57,6 @@ def run_codegraph_query(query, project_path):
 # 按语言的类型/结构名提取策略。目标:从函数源码里挑出"值得回查定义的类型名",
 # 再用 codegraph 拉其定义作为裁判的结构上下文。C/C++ 特化的 `_t`/struct 正则对
 # Python/Go/JS 无意义,故按语言分派;未知语言返回空集(不提取,避免噪声)。
-_TYPE_KIND_BY_LANG = {
-    "cpp": ["struct", "class", "enum", "union", "typedef"],
-    "c": ["struct", "enum", "union", "typedef"],
-    "java": ["class", "interface", "enum", "record"],
-    "go": ["struct", "interface", "type"],
-    "python": ["class"],
-    "js": ["class", "interface", "type"],
-}
-
 # 各语言都会命中的通用关键字/内建类型噪声,统一过滤。
 _IGNORED_TYPE_NAMES = {
     "const", "void", "int", "char", "float", "double", "bool", "std", "string",
@@ -92,21 +68,19 @@ _IGNORED_TYPE_NAMES = {
 
 def _candidate_type_names(source_code, target_lang):
     """按语言从源码里挑出候选类型名。"""
-    lang = (target_lang or "").lower()
-    if lang in ("typescript", "ts", "javascript"):
-        lang = "js"
+    norm = get_norm_lang(target_lang)
     names = set()
 
     # CamelCase 标识符对多数语言都是类型/类名的强信号(Java/Go/JS/C++ 通用)。
-    if lang in ("cpp", "c", "java", "go", "js", "python"):
+    if norm in ("cpp", "c", "java", "go", "js", "python"):
         names.update(re.findall(r"\b[A-Z][a-zA-Z0-9_]+\b", source_code))
 
     # C/C++ 专属:snake_case 的 `_t` 类型别名。
-    if lang in ("cpp", "c"):
+    if norm in ("cpp", "c"):
         names.update(re.findall(r"\b[a-z0-9_]+_t\b", source_code))
 
     # 各语言的声明关键字后紧跟的名字(struct/class/interface/type/record ...)。
-    kinds = _TYPE_KIND_BY_LANG.get(lang)
+    kinds = get_type_kinds(target_lang)
     if kinds:
         kw = "|".join(kinds)
         names.update(re.findall(rf"\b(?:{kw})\s+([A-Za-z_][A-Za-z0-9_]*)\b", source_code))

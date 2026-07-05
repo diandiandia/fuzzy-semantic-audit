@@ -5,6 +5,8 @@ import argparse
 import sys
 import os
 
+from src.common.lang_utils import get_cwe_aliases, CWE_ALIASES
+
 def setup_args():
     parser = argparse.ArgumentParser(description="CWE-699 XML Catalog Parser & Pruner")
     parser.add_argument("--cwe", required=True, help="Path to CWE XML file (e.g. 699.xml)")
@@ -16,19 +18,15 @@ def setup_args():
     return parser.parse_args()
 
 def get_language_aliases(lang):
-    mapping = {
-        "cpp": ["C++", "C", "Not Language-Specific", "Language-Independent"],
-        "java": ["Java", "Not Language-Specific", "Language-Independent"],
-        "python": ["Python", "Not Language-Specific", "Language-Independent"],
-        "go": ["Go", "Not Language-Specific", "Language-Independent"],
-        "js": ["JavaScript", "Not Language-Specific", "Language-Independent"]
-    }
-    if lang not in mapping and lang != "all":
+    norm_aliases = get_cwe_aliases(lang)
+    if lang.lower() not in CWE_ALIASES and lang != "all":
         # 未知语言(如 rust/php/swift/ruby)不再硬拒:与 explorer/detect_language 的宽容降级对齐,
         # 仅保留"非语言特定 / 语言无关"的弱点,并显式告警(风格同 explorer.py 的未知语言提示)。
+        known = "/".join(CWE_ALIASES.keys())
         print(f"[!] Unknown --lang '{lang}': retaining only language-independent weaknesses. "
-              f"Known languages: cpp/java/python/go/js.", file=sys.stderr)
-    return mapping.get(lang, ["Not Language-Specific", "Language-Independent"])
+              f"Known languages: {known}.", file=sys.stderr)
+    return norm_aliases
+
 
 def parse_xml(xml_path, target_lang):
     if not os.path.exists(xml_path):

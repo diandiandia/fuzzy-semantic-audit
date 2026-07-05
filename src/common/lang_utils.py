@@ -1,63 +1,58 @@
-"""通用语言工具:集中语言 → markdown 代码块标签、文件扩展名的映射。
+"""通用语言工具:从 resources/languages.json 加载语言配置。
 
-P0 去硬编码的落点:报告/剪枝里散落的 ```cpp、扩展名集合、默认 cpp 都统一到这里,
 让 skill 对多语言名副其实,而不是名义上支持、实际处处写死 C/C++。
 """
+import os
+import json
+import sys
 
-# 规范语言标识 → markdown 代码块 fence 标签
-MARKDOWN_LANG = {
-    "cpp": "cpp",
-    "c": "c",
-    "java": "java",
-    "python": "python",
-    "go": "go",
-    "js": "javascript",
-    "ts": "typescript",
-}
+_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "resources", "languages.json")
 
-# 规范语言标识 → 源文件扩展名集合
-LANG_EXTENSIONS = {
-    "cpp": {".c", ".h", ".cpp", ".hpp", ".cc"},
-    "java": {".java"},
-    "python": {".py"},
-    "go": {".go"},
-    "js": {".js", ".ts"},
-}
-
-# 扩展名 → 规范语言标识(供语言自动探测复用)
-EXT_TO_LANG = {
-    ".cpp": "cpp", ".hpp": "cpp", ".cc": "cpp", ".c": "cpp", ".h": "cpp",
-    ".java": "java",
-    ".py": "python",
-    ".go": "go",
-    ".js": "js", ".ts": "js",
-}
-
+# 默认全局备用表,防加载失败并维持导入兼容性
+MARKDOWN_LANG = {}
+LANG_EXTENSIONS = {}
+EXT_TO_LANG = {}
+ALIASES = {}
+CWE_ALIASES = {}
+TYPE_KINDS = {}
+RESOURCE_SIGNALS = {}
+COMMON_RESOURCE_SIGNALS = []
 DEFAULT_LANG = "cpp"
 
+try:
+    with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+        _cfg = json.load(f)
+    
+    # 动态加载映射
+    ALIASES = _cfg.get("aliases", {})
+    EXT_TO_LANG = _cfg.get("ext_to_lang", {})
+    COMMON_RESOURCE_SIGNALS = _cfg.get("_common_resource_signals", [])
+    
+    for l_key, l_val in _cfg.get("languages", {}).items():
+        MARKDOWN_LANG[l_key] = l_val.get("markdown_tag", l_key)
+        LANG_EXTENSIONS[l_key] = set(l_val.get("extensions", []))
+        CWE_ALIASES[l_key] = l_val.get("cwe_aliases", [])
+        TYPE_KINDS[l_key] = l_val.get("type_kinds", [])
+        RESOURCE_SIGNALS[l_key] = l_val.get("resource_signals", [])
+except Exception as e:
+    print(f"Warning: failed to load languages.json ({e}); using empty fallback.", file=sys.stderr)
 
-def markdown_tag(target_lang):
-    """返回给定语言的 markdown 代码块标签;未知语言退回空标签(纯 ``` 围栏)。"""
+def get_norm_lang(target_lang):
+    """规范化语言名字(支持别名映射)。"""
     if not target_lang:
         return ""
     lang = target_lang.lower()
-    if lang in ("typescript", "ts", "javascript"):
-        lang = "js"
-    return MARKDOWN_LANG.get(lang, "")
+    return ALIASES.get(lang, lang)
 
+def markdown_tag(target_lang):
+    """返回给定语言的 markdown 代码块标签;未知语言退回空标签(纯 ``` 围栏)。"""
+    norm = get_norm_lang(target_lang)
+    return MARKDOWN_LANG.get(norm, "")
 
 def extensions_for(target_lang):
-    """返回给定语言的源文件扩展名集合。
-
-    未知语言返回**空集**(而非静默退回 C/C++)——空集让上游的扩展名过滤自动放行
-    所有文件(见 explorer.is_boilerplate_or_test),即"未知语言时不按扩展名裁剪",
-    这比"把非 C 文件默默按 C 规则裁掉"更符合通用多语言语义。上游据此可自行告警。
-    """
-    lang = (target_lang or "").lower()
-    if lang in ("typescript", "ts", "javascript"):
-        lang = "js"
-    return LANG_EXTENSIONS.get(lang, set())
-
+    """返回给定语言的源文件扩展名集合。"""
+    norm = get_norm_lang(target_lang)
+    return LANG_EXTENSIONS.get(norm, set())
 
 def all_source_extensions():
     """所有已知语言的扩展名并集(供技术栈预扫描遍历用)。"""
@@ -65,3 +60,23 @@ def all_source_extensions():
     for s in LANG_EXTENSIONS.values():
         exts |= s
     return exts
+
+def get_cwe_aliases(target_lang):
+    """返回指定语言在 CWE XML 中匹配的语言别名列表。"""
+    norm = get_norm_lang(target_lang)
+    # 如果语言不支持且非 'all'，由上游处理退化
+    return CWE_ALIASES.get(norm, ["Not Language-Specific", "Language-Independent"])
+
+def get_type_kinds(target_lang):
+    """返回指定语言在提取类/结构定义时关注的关键字类别。"""
+    norm = get_norm_lang(target_lang)
+    return TYPE_KINDS.get(norm, [])
+
+def get_resource_signals(target_lang):
+    """返回指定语言专属信号词与通用信号词的并集。"""
+    norm = get_norm_lang(target_lang)
+    sig = set(RESOURCE_SIGNALS.get(norm, []))
+    sig.update(COMMON_RESOURCE_SIGNALS)
+    return sorted(list(sig))
+
+
