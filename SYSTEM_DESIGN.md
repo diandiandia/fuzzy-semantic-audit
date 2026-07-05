@@ -444,7 +444,8 @@ audit_report.md
 
 ### 15.4 ⚠️ 技术栈敏感 intent(评估 §2.2)
 - **提案**:intent 生成时喂入项目技术栈(Flask/Django/Spring),生成栈专属检索词(如 Django `RawSQL`)。
-- **判定:方向对,缓做**。评估给的代码 `planData.tech_stack` 有事实错误——**plan 目前不存 tech_stack 字段**(预扫描 `found_tags` 未落盘到 plan)。要做需先做前置改造:orchestrator 把预扫描结果+框架识别持久化进 plan,再喂给 intent workflow。属新功能,留待有真实全量审计需求时数据驱动决策。
+- **判定:方向对,缓做**。评估给的代码 `planData.tech_stack` 有事实错误——**plan 目前不存 tech_stack 字段**(预扫描 `found_tags` 未落盘到 plan,已复核:plan top-level 仅 `project_path/target_language/status/tasks`)。要做需先做前置改造:orchestrator 把预扫描结果+框架识别持久化进 plan,再喂给 intent workflow。属新功能,留待有真实全量审计需求时数据驱动决策。
+- **补充粒度缺口(2026-07-05 复评)**:现有 `prescan_rules.json` 的 tag 是**粗类**(`concurrency`/`network`/`authz`/`injection`…),不是"Django/Spring"这种**框架名**。要生成 `RawSQL`/`@PreAuthorize` 那种栈专属检索词,前置改造还须在 prescan 里**新增框架级特征 tag**,否则只能喂"有 authz 类特征"这种钝信息,达不到提案预期精度。此框架识别与 §15.8 的入口识别是**同一套知识**,应作共同基建一次落地。
 
 ### 15.5 ⚠️ 报告完整性统计与未扫 CWE 差集 (评估 #3 路线 Y)
 - **提案**: 让 `reporter.py` 自动计算 catalog 全集与 plan 的差集，并在 workflow 写入时包含 `run_meta` 等截断/限制统计，生成极度精确的完整性报告。
@@ -457,6 +458,15 @@ audit_report.md
 ### 15.7 ⚠️ 增强技术栈裁剪覆盖率 (评估 #7 路线 Y)
 - **提案**: 扩充 `prescan_rules.json` 中的 CWE 映射关系，增强裁剪阶段的削减力度。
 - **判定: 缓做**。本系统裁剪阶段采用保守裁剪设计：不认识的 CWE 一律放行以防漏报。扩大映射覆盖面属于规则微调/调参，待未来针对特定高频漏洞类型的全量审计需求明确后，由真实数据驱动扩展。
+
+### 15.8 ⚠️ 调用链向上追溯到外部 API 入口(2026-07-05 提案)
+- **提案**:对多层代理/RPC 调用,把调用链**最顶层的外部 API 路由入口**作为元数据强打入候选包,提升 Path Reachability 裁判判定"外部可达性"的可信度。
+- **判定:方向对(优先级高于 §15.4),缓做待需求**。命中真实弱点:`reachability_hint`(`codegraph_wrapper.py`)目前**纯靠路径名猜**可达性(文件是否在 `test/`、`tools/` 目录),而 Path Reachability 是裁判 prompt 的第 1 条判据且分量重(`explorer.py`)。把真实顶层路由入口作为**硬证据**注入,可把"猜"升级为"可采信",对降误报/漏报杠杆大。基建也已铺一半:`build_call_chain_context` 已在拉 callers,但**只上溯一层**,本提案是将其递归化并识别顶层入口,非从零造。
+- **实现前置与闸门(缓做理由)**:
+  1. **入口识别判据**依赖路由/注册模式(`@app.route`、`@GetMapping`、`http.HandleFunc`…)——与 §15.4 的框架识别是**同一套知识**,应共享 `prescan_rules.json`/`languages.json` 里的框架特征,一次基建两处收益。
+  2. **必须设 `max_depth`(建议 3~4)+ 访问集去环**:多层代理/RPC 上溯若无深度上限与环检测,递归会失控(同现有 `limit`/`max_len` 闸门思路)。
+  3. 递归上溯多次 shell 到 codegraph,**有性能成本**,深度上限同时是成本闸门。
+  留待有真实多层架构项目(RPC/微服务)审计需求时,由数据驱动落地。
 
 ---
 
