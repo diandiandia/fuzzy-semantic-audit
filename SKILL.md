@@ -83,7 +83,7 @@ Apply asymmetric decision policies on parallel referee evaluation votes and comm
 ```bash
 python3 -m src_v2.cli.verify_batch --plan "$TARGET/.audit_workspace_v2/audit_plan.json" --writeback <verdicts_file_path>
 ```
-*Updates registry, syncs `manual_review` queue, and transitions fully triaged shards to status `"verified"`.*
+*Updates candidate verdicts, syncs `manual_review` queue, and preserves shard/candidate state for subsequent report compilation.*
 
 ### Step 7: Compile Reports
 Generate user-facing Markdown reports summarizing findings, backlogs, zero-recall pairs, and phase durations:
