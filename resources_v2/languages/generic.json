@@ -1,0 +1,8 @@
+{
+  "lang_key": "generic",
+  "extensions": [".html", ".css", ".json", ".yaml", ".yml", ".sh", ".bash", ".sql"],
+  "capability_level": "L0",
+  "resource_signals": [
+    "(?i)(db|database|conn|sql|query|open|read|write|send|recv|socket|http|request|api|s3|storage|file|fs|path)"
+  ]
+}

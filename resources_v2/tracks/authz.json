@@ -1,0 +1,7 @@
+{
+  "track_id": "authz",
+  "title": "Authorization and Ownership",
+  "mapped_cwes": ["285", "639", "862", "863"],
+  "priority": "high",
+  "default_stance": "falsify_authz"
+}

@@ -1,0 +1,8 @@
+{
+  "lang_key": "go",
+  "extensions": [".go"],
+  "capability_level": "L1",
+  "resource_signals": [
+    "\\b(Query|Exec|Open|ReadFile|WriteFile|Command|dial|http|Get|Post|channel)\\b"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "lang_key": "javascript",
+  "extensions": [".js", ".jsx", ".ts", ".tsx"],
+  "capability_level": "L1",
+  "resource_signals": [
+    "\\b(query|execute|readFile|writeFile|open|connect|request|fetch|axios|db|fs)\\b"
+  ]
+}

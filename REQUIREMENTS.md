@@ -1,117 +1,324 @@
-# 📋 Fuzzy Semantic Audit Requirements & Design Specification
+# Fuzzy Semantic Audit V2 —— 需求文档
 
-This document details the system requirements (Functional, Verification, and Operational) extracted from the `fuzzy-semantic-audit` codebase, workflows, and design files, mapping each requirement to its design implementation.
-
----
-
-## 1. 📂 CWE Catalog & Tech Stack Requirements
-
-### REQ-CAT-001: CWE XML Parser and Filtering
-*   **Description**: The system must ingest the official CWE-699 Software Development catalog XML file, parse it, and filter out weaknesses that are not applicable to the target programming language.
-*   **Design Brief**: Satisfied by `cwe_parser.py` ([M1](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m1_cwe/cwe_parser.py)). It uses `xml.etree.ElementTree` to parse the catalog, matches `<Language>` nodes, and writes the language-specific catalog to `catalog.json` under `.audit_workspace/`.
-
-### REQ-DET-001: Automatic Stack & Language Detection
-*   **Description**: The system must automatically detect the target project's primary programming language and framework stack to prune irrelevant CWE tasks. Note: Pruning is conservative — only CWEs explicitly mapped to missing tech stacks in prescan_rules are pruned; unmapped CWEs are preserved by default to prevent false negatives.
-*   **Design Brief**: Satisfied by `audit_orchestrator.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/audit_orchestrator.py)) and `lang_utils.py` ([common](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/common/lang_utils.py)). It counts file extensions in the target directory (ignoring build, test, and vendor dirs) and identifies frameworks based on dependency files (e.g., `package.json` for JS, `requirements.txt`/`Pipfile` for Python).
+> 目标: 定义 Fuzzy Semantic Audit V2 的产品需求、功能边界、验收标准和实施优先级。
+> 本文档面向实现阶段,作为系统设计与软件设计的上游输入。
 
 ---
 
-## 2. 🔍 Double-Road Recall (Candidate Exploration)
+## 1. 项目背景
 
-### REQ-REC-001: Dual-Road Symbol and Semantic Recall
-*   **Description**: The system must recall candidate functions matching CWE vulnerabilities through two parallel roads: precise symbol lookup and semantic vector search.
-*   **Design Brief**: Satisfied by `explorer.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/explorer.py)) which performs:
-    1. Exact matching of generated keywords against the CodeGraph index.
-    2. Embedding-based semantic search querying the vector database built by `vector_index.py` ([M2](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m2_index/vector_index.py)) using `fastembed` and `bge-small-en-v1.5`.
+现有版本已经证明两件事:
 
-### REQ-REC-002: Logical Vulnerability Resource Recall
-*   **Description**: The system must open a third recall road specifically targeting logical weaknesses (e.g., IDOR, BOLA, missing authorization) by harvesting functions that access resources using user-controlled parameters.
-*   **Design Brief**: Satisfied by `explorer.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/explorer.py)) for CWE IDs belonging to `LOGIC_FLAW_CWES`. It matches per-language resource access patterns (e.g., `findById`, `get_by_id`) configured in the unified `languages.json` config.
+1. 用 workflow 编排代码审计,比纯 AI mode 更稳定。
+2. 现有实现仍然存在单语言假设、候选漏收、预算即丢审等问题。
 
-### REQ-REC-004: Usages-based Ripgrep Fallback Recall
-*   **Description**: The candidate explorer must support usage-based signal recall by searching for references of signals (including regexes and chain properties like objects.filter) and identifying their enclosing functions to bypass definition-only query limits.
-*   **Design Brief**: Satisfied by `find_usages_enclosing_functions` in `codegraph_wrapper.py` ([M2](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m2_index/codegraph_wrapper.py)) which runs `rg -n` on project files and searches upwards for function signatures.
-
-
-### REQ-REC-003: Boilerplate and Noise Pruning
-*   **Description**: The system must ignore candidates in auxiliary folders (e.g., unit tests, client mockups, monitoring scripts) to keep the candidate pool relevant.
-*   **Design Brief**: Satisfied by `is_boilerplate_or_test` in `explorer.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/explorer.py)) which checks filenames and paths against `BLACKLIST_FOLDERS` (e.g., `test`, `mock`, `emulator`, `monitor`).
+V2 的目标不是对现有版本做局部修补,而是构建一套真正面向多语言仓库、覆盖优先、可恢复的通用审计 skill。
 
 ---
 
-## 3. 🚀 Workflow Execution & verification
+## 2. 产品目标
 
-### REQ-WF-001: Dynamic Workflow Orchestration
-*   **Description**: Verification iteration must be orchestrated by a JavaScript-driven pipeline to guarantee that all candidate packages are systematically traversed without premature termination.
-*   **Design Brief**: Satisfied by [verify_workflow.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/verify_workflow.js) (L4), which pulls `pending` candidates from `audit_plan.json` and runs them through `pipeline()` and `parallel()` agent APIs.
+### 2.1 核心目标
 
-### REQ-WF-002: Batch Writeback Optimization
-*   **Description**: The system must aggregate candidate verification verdicts in memory and perform a single writeback operation to minimize LLM command execution overhead.
-*   **Design Brief**: Satisfied by [verify_workflow.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/verify_workflow.js) and `trifecta_verifier.py` ([M4](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m4_verify/trifecta_verifier.py)). The JS workflow dumps the results array to a temporary file (`temp_batch_results.json`) and calls the `batch-update` subcommand once, executing a single file lock write in `plan_manager.py`.
+1. 支持多语言仓库代码审计。
+2. 支持 workflow 全流程编排,避免 AI mode 跳步骤、跳候选、提前结束。
+3. 对所有进入系统的候选建立可追踪状态。
+4. 预算只影响调度顺序,不影响候选是否最终被审计。
+5. 输出可区分“已证实漏洞”“待人工复核”“已证伪”的审计结果。
 
-### REQ-WF-003: End-to-End Workflow Orchestration
-*   **Description**: The system must provide a single entry point workflow that orchestrates the entire 7-step code audit process end-to-end to eliminate manual shell chaining.
-*   **Design Brief**: Satisfied by [orchestrate_audit.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/orchestrate_audit.js) (L4), which calls Python CLIs and sub-workflows. Python CLIs output a single-line JSON at the end (e.g. `cwe_parser` outputs `{"catalog": "<path>", "weaknesses": N}`) which is parsed by the JS workflow using a schema.
+### 2.2 成功标准
 
-
----
-
-## 4. 🛡️ Verification & Adversarial Triage
-
-### REQ-VER-001: Fast Severity Pre-Filter
-*   **Description**: The system must pre-screen candidate functions and assign them a security severity rating (1–10). Verification must be bypassed for low-severity candidates (below threshold).
-*   **Design Brief**: Satisfied by Stage B1 in [verify_workflow.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/verify_workflow.js) calling a severity agent. Candidates below `SEV_THRESHOLD` (default 5) are automatically triaged as `false_positive` without invoking the expensive referee stage.
-
-### REQ-VER-002: Three-Perspective Adversarial Verification
-*   **Description**: High-severity candidates must be analyzed by three independent LLM referees from three distinct perspectives with a default-falsification stance. The referee instructions must be dynamically tailored based on the target CWE type (Logic flaw vs Memory vulnerability) to avoid analysis mismatch.
-*   **Design Brief**: Satisfied by Stage B2 in [verify_workflow.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/verify_workflow.js), executing three parallel agents with cweId-specific dynamic prompts:
-    1.  **Referee 1**: Path Reachability (external input tracing).
-    2.  **Referee 2**: Guard Validity (checking if constraints/defense logic can be bypassed, enforcing BOLA/IDOR on logical CWEs, and memory bounds checks on memory CWEs).
-    3.  **Referee 3**: Exploitability (proving control-flow state changes / API parameter manipulation on logical CWEs, and memory corruption on memory CWEs).
-
-### REQ-VER-003: Asymmetric Three-Bucket Triage
-*   **Description**: Candidates must be triaged into three buckets (verified, needs_review, false_positive) using asymmetric voting rules to prevent false negatives. The triage logic must rely on robust boolean status flags from the referees to prevent string-parsing fragility.
-*   **Design Brief**: Satisfied by the `triage` function in [verify_workflow.js](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/workflows/verify_workflow.js):
-    *   `verified`: $\ge$ 2 votes of true vulnerability **and** `hasConcreteAttackPath` is true.
-    *   `needs_review`: $\ge$ 1 vote or `hasMissingEvidence` is true.
-    *   `false_positive`: 3 votes for dismissal and no missing evidence.
-
-### REQ-VER-004: Caller Context Enrichment
-*   **Description**: To audit logical weaknesses, candidate functions must carry context about their call chains, including code snippets of their closest callers.
-*   **Design Brief**: Satisfied by `build_call_chain_context` in `codegraph_wrapper.py` ([M2](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m2_index/codegraph_wrapper.py)). It queries CodeGraph for up to 3 upstream callers and extracts the first ~15 lines of their source code.
-
-### REQ-VER-005: CodeGraph Callers Ripgrep Fallback
-*   **Description**: If CodeGraph struggles to resolve caller associations due to dynamic routing or decorators, the system must search the codebase for text references to prevent reachability false negatives.
-*   **Design Brief**: Satisfied by `get_callers_ripgrep_fallback` in `codegraph_wrapper.py` ([M2](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m2_index/codegraph_wrapper.py)). If CodeGraph's caller command yields 0 items, it runs `rg -n -w <symbol>`, opens the file, and reads backwards to find the nearest enclosing function header.
+1. 系统可对 monorepo 进行按语言分片审计。
+2. 候选不会因 `limit` 或低 severity 被静默丢弃。
+3. 每次运行后都能给出 coverage report。
+4. 系统可从中断状态恢复继续执行。
 
 ---
 
-## 5. 📊 Reporting & Completeness
+## 3. 用户与使用场景
 
-### REQ-REP-001: Three-Bucket Report Compilation
-*   **Description**: The system must generate a Markdown report summarizing the audit results grouped into verified vulnerabilities, needs review cases, and false positives.
-*   **Design Brief**: Satisfied by `reporter.py` ([M5](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m5_report/reporter.py)). It formats candidate data, inlines the call chains, code snippets, and individual referee votes, and writes to `audit_report.md`.
+### 3.1 目标用户
 
-### REQ-REP-002: Honest Completeness Boundary Logging
-*   **Description**: The report must display the count of remaining pending candidates to indicate that the verification run is potentially incomplete.
-*   **Design Brief**: Satisfied by `reporter.py` ([M5](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m5_report/reporter.py)) which counts the remaining candidates in the plan with `verdict == "pending"` and flags them in the report as "Unverified / Pending Candidates" to indicate incomplete audits.
+1. 使用 Codex/Claude Code/类似 agent 的安全研究人员
+2. 需要批量做代码审计的开发者
+3. 需要在 monorepo 中做逻辑漏洞和实现漏洞扫描的工程团队
+
+### 3.2 典型场景
+
+1. 审计一个 Python + TypeScript + Go 的 monorepo。
+2. 审计一个未知语言或框架较多的代码库,要求至少提供 generic coverage。
+3. 审计中途中断,下次继续从队列恢复。
+4. 审计完成后查看 verified、needs_review 和 deferred 的分布。
 
 ---
 
-## 6. ⚙️ Operational & Performance Controls
+## 4. 功能需求
 
-### REQ-CST-001: Pre-Deduplication cost controls
-*   **Description**: The system must deduplicate exploration results across all CWEs before starting verification to avoid duplicate LLM evaluation of the same function.
-*   **Design Brief**: Satisfied by `explorer.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/explorer.py)) which groups candidates by `(file, function)` and merges their associated CWE IDs into `matched_cwes`.
+### 4.1 仓库分析
 
-### REQ-CST-002: Adaptive Vector Search Width
-*   **Description**: The system must scale the vector search top-K retrieval limit based on the size of the codebase to prevent candidate explosion on small projects.
-*   **Design Brief**: Satisfied by `adaptive_vector_topk` in `explorer.py` ([M3](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/m3_locate/explorer.py)), which maps index size to an optimized top_k search width (`clamp(index_size * 5%, 5, 30)`).
+系统必须:
 
-### REQ-ENV-001: Workspace Separation
-*   **Description**: All audit work products (catalog, plans, indices, reports) must be isolated inside the target project workspace to support multi-project audits.
-*   **Design Brief**: Satisfied by `paths.py` ([common](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/common/paths.py)) which points all outputs to a `.audit_workspace/` directory under the target project's root.
+1. 扫描目标仓库文件树。
+2. 识别语言分布。
+3. 识别主要目录边界、测试目录、生成物目录。
+4. 识别已知框架和构建线索。
+5. 生成仓库级画像。
 
-### REQ-ENV-002: Parallel Write Lock Protection
-*   **Description**: The system must prevent file corruption during parallel write operations to the plan JSON file.
-*   **Design Brief**: Satisfied by `plan_manager.py` ([common](file:///home/zjamg/test_project_code_audit/fuzzy-semantic-audit/src/common/plan_manager.py)), which acquires an exclusive file lock (`fcntl.flock(f, fcntl.LOCK_EX)`) before modifying the audit plan.
+### 4.2 多语言分片
+
+系统必须:
+
+1. 将仓库拆分为多个 `language_shard`。
+2. 支持一个仓库同时包含多个语言分片。
+3. 对未知语言使用 `generic` 分片能力。
+4. 不允许通过“选择主语言”覆盖其他语言内容。
+
+### 4.3 索引与召回
+
+系统必须:
+
+1. 支持符号/调用图召回。
+2. 支持向量语义召回。
+3. 支持规则召回。
+4. 支持资源访问类召回。
+5. 对多个召回源做统一去重和归一化。
+
+系统应该:
+
+1. 支持 shard 级增量索引。
+2. 支持索引失败后的降级模式。
+
+### 4.4 审计轨道
+
+系统必须至少支持以下轨道:
+
+1. `authz`
+2. `state_machine`
+3. `resource_access`
+4. `injection`
+5. `input_validation`
+6. `deserialization`
+7. `memory_safety`
+8. `concurrency`
+9. `crypto`
+
+系统必须:
+
+1. 以 `track` 作为覆盖单位。
+2. 允许一个候选同时属于多个 track。
+3. 不允许在预扫描阶段直接删除整个 track。
+
+### 4.5 候选注册与状态管理
+
+系统必须:
+
+1. 为每个候选生成稳定 `candidate_id`。
+2. 存储候选的文件、符号、跨度、语言、来源轨道、召回来源。
+3. 为每个候选维护状态机。
+4. 支持批量写回状态。
+5. 支持候选查询与恢复。
+
+系统不得:
+
+1. 仅使用函数名作为候选唯一键。
+2. 因预算原因把候选直接写成 `false_positive`。
+
+### 4.6 Workflow 编排
+
+系统必须:
+
+1. 用 workflow 负责全流程状态推进。
+2. 用 workflow 显式驱动 inventory、index、recall、verify、report。
+3. 用队列而不是 agent 自由发挥来控制验证批次。
+4. 支持中断后恢复。
+
+### 4.7 验证机制
+
+系统必须:
+
+1. 对候选运行多裁判验证。
+2. 至少包含:
+   - reachability
+   - guard/authz
+   - exploitability/state
+3. 输出结构化裁判结果。
+4. 根据策略将结果归类为:
+   - `verified`
+   - `needs_review`
+   - `false_positive`
+   - `deferred`
+   - `error`
+
+系统应该:
+
+1. 对支持的语言启用语言特化裁判。
+2. 为每个 verdict 保存证据与理由。
+
+### 4.8 报告输出
+
+系统必须输出:
+
+1. `audit_report.md`
+2. `coverage_report.md`
+3. `review_queue.md`
+
+`coverage_report.md` 必须包含:
+
+1. shard 覆盖情况
+2. track 覆盖情况
+3. verified / needs_review / false_positive / deferred / error 数量
+4. zero-recall 轨道
+5. 未完成候选数量
+
+---
+
+## 5. 非功能需求
+
+### 5.1 可恢复性
+
+1. 任一阶段中断后可恢复。
+2. 单个 shard 失败不应阻塞全部流程。
+3. 单个候选失败应记录为 `error` 并继续其他候选。
+
+### 5.2 可扩展性
+
+1. 新语言应以插件方式接入。
+2. 新审计轨道应以配置和模块方式接入。
+3. 新的 recall 通道不应破坏现有 workflow。
+
+### 5.3 可观测性
+
+系统必须记录:
+
+1. 各阶段耗时
+2. 候选数量变化
+3. 各轨道召回情况
+4. 各 verdict 分布
+5. 队列积压情况
+
+### 5.4 准确性与可信度
+
+1. `verified` 必须有清晰理由和证据。
+2. `needs_review` 必须与 `verified` 区分。
+3. `false_positive` 必须来自验证结果,不是预算裁剪。
+
+### 5.5 性能
+
+系统应该:
+
+1. 支持增量索引。
+2. 支持并行 recall。
+3. 支持批量 writeback。
+
+系统可以:
+
+1. 对超大仓库分 shard 分批执行。
+
+---
+
+## 6. 数据与状态需求
+
+系统必须维护以下持久化数据:
+
+1. `repo_profile.json`
+2. `audit_plan.json`
+3. `candidate_registry.jsonl`
+4. `verify queue`
+5. `deferred queue`
+6. `manual review queue`
+7. 审计报告
+
+系统必须保证:
+
+1. 数据可重建
+2. 状态可追踪
+3. 写回幂等
+
+---
+
+## 7. 验收标准
+
+### 7.1 MVP 验收
+
+满足以下条件视为 V2 MVP 可用:
+
+1. 能对包含至少两种语言的仓库建立 `language_shard`。
+2. 能建立候选注册表并生成稳定主键。
+3. 能通过 workflow 跑通 inventory -> recall -> verify -> report。
+4. `limit` 只影响本轮验证量,未消费候选进入 deferred 或保留在队列中。
+5. 能输出 coverage report。
+
+### 7.2 完整版验收
+
+1. 支持 generic plugin。
+2. 支持至少 Python、JavaScript/TypeScript、Go、Java、C/C++ 插件。
+3. 支持多 recall 通道并统一归一化。
+4. 支持中断恢复。
+5. 支持多裁判结果批量写回。
+
+---
+
+## 8. 范围边界
+
+### 8.1 本期范围
+
+1. 多语言分片
+2. 候选注册表
+3. workflow 队列化验证
+4. coverage report
+5. generic plugin
+6. 核心语言插件框架
+
+### 8.2 暂不纳入本期
+
+1. 所有语言的深度语义建模
+2. 自动 exploit 生成
+3. 动态执行与运行时 instrumentation
+4. IDE 或 Web UI
+
+---
+
+## 9. 实施优先级
+
+### P0
+
+1. 新 plan schema
+2. candidate registry
+3. state machine
+4. workflow 队列化验证
+5. coverage report
+
+### P1
+
+1. generic plugin
+2. 多语言 shard
+3. recall 归一化
+4. batch writeback
+
+### P2
+
+1. 语言特化插件
+2. 更多 track 规则
+3. 更细粒度优先级排序
+
+---
+
+## 10. 结论
+
+V2 的需求核心只有一句话:
+
+> 构建一套覆盖优先、可恢复、可扩展的多语言代码审计 skill,让 workflow 负责保证“不会跳过”,让插件负责处理语言差异,让状态机负责保证结果可信。
+
+---
+
+## 11. AI 实施约束
+
+为了让其他 AI 编码工具可以直接按文档实现,本需求文档补充以下约束:
+
+1. 架构说明不是唯一输入,实现必须同时遵守 `V2_SYSTEM_DESIGN.md`、`V2_SOFTWARE_DESIGN.md` 和 `AI_IMPLEMENTATION_GUIDE.md`。
+2. 若实现中出现文档未覆盖的选择题,必须优先满足:
+   - 不丢候选
+   - 不静默降级
+   - 不把预算问题写成安全结论
+3. 若某项能力做不到,必须输出 `deferred` 或 `error`,而不是伪造 `verified` / `false_positive`。
+4. 未经文档明确授权,不得引入“主语言唯一化”“severity 直接排除”“仅凭函数名去重”这三类旧架构行为。
