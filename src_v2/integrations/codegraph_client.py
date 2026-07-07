@@ -2,6 +2,7 @@ import subprocess
 import json
 import os
 import re
+import functools
 from typing import List, Dict, Any, Optional
 
 def is_codegraph_available() -> bool:
@@ -39,6 +40,7 @@ def get_source(symbol: str, project_path: str, file_path: Optional[str] = None) 
         pass
     return ""
 
+@functools.lru_cache(maxsize=256)
 def find_usages_enclosing_functions(
     pattern: str, 
     project_path: str, 
