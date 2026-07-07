@@ -42,6 +42,10 @@ def run(
                 if not is_in_shard:
                     continue
                     
+                # Also ensure the plugin matches/accepts this file (filtering out excluded extensions)
+                if not plugin.match_files([file_rel]):
+                    continue
+                    
                 symbol_name = u["name"]
                 start_line = u["line"]
                 end_line = u["line"]

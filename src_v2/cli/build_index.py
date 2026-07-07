@@ -70,10 +70,13 @@ def main():
                     })
 
                 # 3. Build index
-                embedding_index.build_index(shard.shard_id, workspace_dir, records)
+                success = embedding_index.build_index(shard.shard_id, workspace_dir, records)
 
                 # 4. Advance status
-                shard.status = "indexed"
+                if success:
+                    shard.status = "indexed"
+                else:
+                    shard.status = "indexed_fallback"
                 indexed_count += 1
                 
                 log_event(

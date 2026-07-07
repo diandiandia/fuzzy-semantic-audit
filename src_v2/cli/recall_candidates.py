@@ -83,8 +83,8 @@ def main():
     # 5. Update plan summary and shard statuses
     try:
         for shard in plan.language_shards:
-            if shard.status in {"indexed", "discovered"}:
-                shard.status = "recalled"
+            if shard.status in {"indexed", "indexed_fallback", "discovered"}:
+                shard.status = "recalled" if shard.status != "indexed_fallback" else "recalled_fallback"
         save_plan(plan, plan_path)
         update_plan_summary(plan_path, all_candidates)
     except Exception as e:
