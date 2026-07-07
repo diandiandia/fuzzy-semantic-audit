@@ -85,19 +85,13 @@ def run(
     # Group symbols by file for quick lookup
     file_symbols: Dict[str, List[Dict[str, Any]]] = {}
     for s in symbols:
-        # We need the file name, wait, enumerate_symbols can return file or we can map it
-        # Let's assume plugin.enumerate_symbols returns dicts with 'symbol', 'start', 'end' AND 'file' if multi-file
-        # Wait, if not, we should have plugin return 'file' in symbol dict.
-        # Let's assume symbols are annotated with 'file' or we do it. Let's make sure our plugins return 'file' or we map.
-        # In generic plugin, we added symbol to symbols list per file, but did we add 'file'? Let's check!
-        # Ah, in generic.py line 78:
-        # symbols.append({"symbol": name, "start": line_num, "end": end_line})
-        # Wait, we missed adding 'file' in generic.py! Let's check:
-        # Ah, yes. It was:
-        # symbols.append({"symbol": name, "start": line_num, "end": end_line})
-        # Let's make sure it contains "file": file in generic.py as well. We'll fix generic.py.
-        # But first, let's write rule_recall.py assuming it has "file".
-        pass
+        f = s.get("file")
+        if f:
+            if f not in file_symbols:
+                file_symbols[f] = []
+            file_symbols[f].append(s)
+            
+    fallback_syms = [s for s in symbols if s.get("file") is None]
         
     # We will fetch file contents, check rule regexes, and match enclosing symbols.
     rules = plugin.build_track_rules(track.track_id)
@@ -116,7 +110,9 @@ def run(
             continue
 
         # Get symbols for this file
-        file_syms = [s for s in symbols if s.get("file") == file or s.get("file") is None] # fallback
+        file_syms = file_symbols.get(file, [])
+        if fallback_syms:
+            file_syms = file_syms + fallback_syms
 
         for idx, line in enumerate(lines):
             line_no = idx + 1
