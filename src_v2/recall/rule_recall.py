@@ -65,6 +65,18 @@ def match_glob_patterns(repo_path: str, patterns: List[str]) -> List[str]:
                 break
     return matched_files
 
+# Cache file contents globally to avoid reading files repeatedly across tracks
+_file_lines_cache = {}
+
+def get_file_lines(abs_path: str) -> List[str]:
+    if abs_path not in _file_lines_cache:
+        try:
+            with open(abs_path, "r", encoding="utf-8", errors="ignore") as f:
+                _file_lines_cache[abs_path] = f.readlines()
+        except Exception:
+            _file_lines_cache[abs_path] = []
+    return _file_lines_cache[abs_path]
+
 def run(
     repo_path: str,
     shard: LanguageShard,
@@ -103,10 +115,8 @@ def run(
         if not os.path.exists(abs_path):
             continue
             
-        try:
-            with open(abs_path, "r", encoding="utf-8", errors="ignore") as f:
-                lines = f.readlines()
-        except Exception:
+        lines = get_file_lines(abs_path)
+        if not lines:
             continue
 
         # Get symbols for this file
