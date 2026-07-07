@@ -40,6 +40,17 @@ def get_source(symbol: str, project_path: str, file_path: Optional[str] = None) 
         pass
     return ""
 
+_codegraph_file_cache = {}
+
+def _get_file_lines(abs_path: str) -> List[str]:
+    if abs_path not in _codegraph_file_cache:
+        try:
+            with open(abs_path, "r", encoding="utf-8", errors="ignore") as f:
+                _codegraph_file_cache[abs_path] = f.readlines()
+        except Exception:
+            _codegraph_file_cache[abs_path] = []
+    return _codegraph_file_cache[abs_path]
+
 @functools.lru_cache(maxsize=256)
 def find_usages_enclosing_functions(
     pattern: str, 
@@ -138,8 +149,8 @@ def find_usages_enclosing_functions(
             break
         enclosing_func = None
         try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                lines = f.readlines()
+            lines = _get_file_lines(file_path)
+            if lines:
                 start_idx = min(line_num - 1, len(lines) - 1)
                 for idx in range(start_idx, -1, -1):
                     line_text = lines[idx]
