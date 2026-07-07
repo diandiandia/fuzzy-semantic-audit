@@ -74,37 +74,59 @@ def find_usages_enclosing_functions(
 
     matches = []
     
-    # Pure python search
-    pat_regex = re.compile(pattern if is_regex else r'\b' + re.escape(pattern) + r'\b')
-    for root, dirs, files in os.walk(project_path):
-        dirs[:] = [d for d in dirs if not d.startswith('.')]
-        for f in files:
-            _, ext = os.path.splitext(f)
-            if ext.lower() in {
-                ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".pdf", ".zip", ".tar",
-                ".gz", ".mp3", ".mp4", ".wav", ".exe", ".dll", ".so", ".bin", ".db",
-                ".woff", ".woff2", ".eot", ".ttf", ".jsonl", ".json", ".md"
-            }:
-                continue
-                
-            file_path = os.path.join(root, f)
-            try:
-                with open(file_path, "r", encoding="utf-8", errors="ignore") as file_obj:
-                    for line_idx, line_text in enumerate(file_obj, 1):
-                        if pat_regex.search(line_text):
-                            is_self_def = False
-                            for regex in func_regexes:
-                                m = regex.search(line_text)
-                                if m:
-                                    defined_name = m.group(1)
-                                    if defined_name == pattern or (not is_regex and defined_name in pattern):
-                                        is_self_def = True
-                                    break
-                            if is_self_def:
-                                continue
-                            matches.append((file_path, line_idx))
-            except Exception:
-                pass
+    # Try git grep first for near-instant execution in git repos
+    try:
+        cmd = ["git", "grep", "-n", "--no-color", "-I"]
+        if not is_regex:
+            if re.match(r'^\w+$', pattern):
+                cmd.append("-w")
+        cmd.append(pattern)
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_path, timeout=5)
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if line.strip():
+                    parts = line.split(":", 2)
+                    if len(parts) >= 2:
+                        rel_path = parts[0]
+                        line_num = int(parts[1])
+                        abs_path = os.path.join(project_path, rel_path)
+                        matches.append((abs_path, line_num))
+    except Exception:
+        pass
+
+    # Fallback to pure python search if git grep returned no matches
+    if not matches:
+        pat_regex = re.compile(pattern if is_regex else r'\b' + re.escape(pattern) + r'\b')
+        for root, dirs, files in os.walk(project_path):
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for f in files:
+                _, ext = os.path.splitext(f)
+                if ext.lower() in {
+                    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".pdf", ".zip", ".tar",
+                    ".gz", ".mp3", ".mp4", ".wav", ".exe", ".dll", ".so", ".bin", ".db",
+                    ".woff", ".woff2", ".eot", ".ttf", ".jsonl", ".json", ".md"
+                }:
+                    continue
+                    
+                file_path = os.path.join(root, f)
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as file_obj:
+                        for line_idx, line_text in enumerate(file_obj, 1):
+                            if pat_regex.search(line_text):
+                                is_self_def = False
+                                for regex in func_regexes:
+                                    m = regex.search(line_text)
+                                    if m:
+                                        defined_name = m.group(1)
+                                        if defined_name == pattern or (not is_regex and defined_name in pattern):
+                                            is_self_def = True
+                                        break
+                                if is_self_def:
+                                    continue
+                                matches.append((file_path, line_idx))
+                except Exception:
+                    pass
 
     callers = []
     seen = set()
