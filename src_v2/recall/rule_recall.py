@@ -77,6 +77,9 @@ def get_file_lines(abs_path: str) -> List[str]:
             _file_lines_cache[abs_path] = []
     return _file_lines_cache[abs_path]
 
+# Cache symbol lists per shard to avoid repeating expensive symbol extraction scans across tracks
+_shard_symbols_cache = {}
+
 def run(
     repo_path: str,
     shard: LanguageShard,
@@ -93,7 +96,10 @@ def run(
         return candidates
 
     # 2. Get symbols
-    symbols = plugin.enumerate_symbols(repo_path, matched_files)
+    cache_key = (shard.shard_id, tuple(matched_files))
+    if cache_key not in _shard_symbols_cache:
+        _shard_symbols_cache[cache_key] = plugin.enumerate_symbols(repo_path, matched_files)
+    symbols = _shard_symbols_cache[cache_key]
     # Group symbols by file for quick lookup
     file_symbols: Dict[str, List[Dict[str, Any]]] = {}
     for s in symbols:
