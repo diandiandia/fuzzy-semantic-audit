@@ -1,5 +1,5 @@
 ---
-name: fuzzy-semantic-audit
+name: fuzzy-semantic-audit-v2
 description: Multilingual coverage-first codebase vulnerability scanner with adversarial LLM referee triage and state tracking (V2)
 ---
 
@@ -19,7 +19,7 @@ To run the audit workflow, prompt the Google Antigravity agent with the followin
 > *"Run the JavaScript workflow at `workflows/v2_orchestrate_audit.js` with parameters: repoRoot = '$SKILL', projectPath = '$TARGET', limit = 100"*
 
 Where:
-* `$SKILL` is the absolute path to this skill's root folder (`/root/fuzzy-semantic-audit`).
+* `$SKILL` is the absolute path to this skill's root folder (`/root/fuzzy-semantic-audit-v2`).
 * `$TARGET` is the absolute path to the repository under audit.
 
 This orchestrator workflow executes the complete end-to-end audit:
@@ -102,10 +102,10 @@ To integrate this custom skill into your Google Antigravity CLI (`agy`) environm
   Create an `.agents/skills` folder under your project root and link this folder:
   ```bash
   mkdir -p .agents/skills
-  ln -s "/path/to/fuzzy-semantic-audit" ".agents/skills/fuzzy-semantic-audit"
+  ln -s "/path/to/fuzzy-semantic-audit-v2" ".agents/skills/fuzzy-semantic-audit-v2"
   ```
 - **Global registration**:
   Alternatively, link globally to your CLI configurations directory:
   ```bash
-  ln -s "/path/to/fuzzy-semantic-audit" "$HOME/.gemini/config/skills/fuzzy-semantic-audit"
+  ln -s "/path/to/fuzzy-semantic-audit-v2" "$HOME/.gemini/config/skills/fuzzy-semantic-audit-v2"
   ```
