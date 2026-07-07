@@ -1,111 +1,75 @@
 ---
-name: fuzzy-semantic-audit-v2
-description: Multilingual coverage-first codebase vulnerability scanner with adversarial LLM referee triage and state tracking (V2)
+name: fuzzy-semantic-audit-v3
+description: Universal codebase security auditor with capability-aware fallback, unified IR, multi-stage candidate pruning, evidence assembly, and adversarial LLM triage (V3)
 ---
 
-# Fuzzy Semantic Audit V2 — Custom Skill
+# Fuzzy Semantic Audit V3 — Custom Skill
 
 > [!NOTE]
-> This folder constitutes a Google Antigravity (AGY) Custom Skill designed to run coverage-first, state-tracked, concurrent-safe codebase security audits.
+> This folder constitutes a V3 custom skill for coverage-first, capability-aware, multi-language codebase security audits.
 
 ---
 
-## 🚀 Orchestration Entrypoint (一键工作流调用)
+## 🚀 Primary Goal
 
-The primary and recommended entrypoint to run the complete V2 audit pipeline is via the **`v2_orchestrate_audit.js`** Javascript workflow. 
+V3 is designed to audit any repository with:
 
-To run the audit workflow, prompt the Google Antigravity agent with the following instruction:
+1. explicit capability levels (`L0/L1/L2/L3`)
+2. transparent degradation (`full_semantic`, `semantic_fallback`, `lexical_fallback`, `rule_only`)
+3. unified IR-based recall
+4. static pruning before LLM triage
+5. standardized evidence packaging
 
-> *"Run the JavaScript workflow at `workflows/v2_orchestrate_audit.js` with parameters: repoRoot = '$SKILL', projectPath = '$TARGET', limit = 100"*
+This branch currently contains the **V3 design baseline**, not a completed V3 implementation.
 
-Where:
-* `$SKILL` is the absolute path to this skill's root folder (`/root/fuzzy-semantic-audit-v2`).
-* `$TARGET` is the absolute path to the repository under audit.
+The main documents are:
 
-This orchestrator workflow executes the complete end-to-end audit:
-1. **Phase 1: Ingestion & Inventory** — Initializes the plan (`init_plan`) and slices the repository files into `language_shards` (`build_inventory`).
-2. **Phase 2: Indexing** — Extracts symbols and pre-builds Fastembed vector indices for discovered shards (`build_index`).
-3. **Phase 3: Recall & Normalize** — Coordinately triggers Multi-Channel Recall (Rule, Graph, Vector, Resource) to identify candidate vulnerability records (`recall_candidates`).
-4. **Phase 4: Adversarial Verification** — Leases candidate batches, spawns referee agents in parallel to decide verdicts (`reachability`, `guard`, `exploit`), maintains active leases in the background via a 60-second renew heartbeat loop, and commits verdicts back (`verify_batch`).
-5. **Phase 5: Reports Compilation** — Compiles Markdown reports summarizing audit findings, backlogs, zero-recall facts, and phase durations (`compile_reports`).
-
----
-
-## 🛠️ Step-by-Step Manual Execution (分步手动执行)
-
-If you need to debug specific pipeline phases, you can execute individual Python CLI commands manually in sequence:
-
-### Step 1: Initialize Workspace & Load Tracks
-Initialize the workspace structure, loading standard default tracks and overlaying custom tracks from `resources_v2/tracks/*.json`:
-```bash
-python3 -m src_v2.cli.init_plan --project "$TARGET"
-```
-*Outputs: `$TARGET/.audit_workspace_v2/audit_plan.json`*
-
-### Step 2: Build Language Sharding Inventory
-Profile the repository and slice target files into language shards:
-```bash
-python3 -m src_v2.cli.build_inventory --plan "$TARGET/.audit_workspace_v2/audit_plan.json"
-```
-*Sets Shard Status to: `"discovered"`*
-
-### Step 3: Build Shard Code Symbol Indices
-Extract code symbols and pre-calculate embeddings:
-```bash
-python3 -m src_v2.cli.build_index --plan "$TARGET/.audit_workspace_v2/audit_plan.json"
-```
-*Sets Shard Status to: `"indexed"`*
-
-### Step 4: Multi-Channel Candidate Recall
-Coordinately execute recall channels (Rule, Graph, Vector, Resource) across all active shard × track pairs, normalizing and prioritizing findings:
-```bash
-python3 -m src_v2.cli.recall_candidates --plan "$TARGET/.audit_workspace_v2/audit_plan.json"
-```
-*Sets Shard Status to: `"recalled"`*
-*Creates: `$TARGET/.audit_workspace_v2/candidate_registry.jsonl` and enqueues to `verify_now` queue.*
-
-### Step 5: Fetch Triage Batch
-Acquire a batch of leased candidates for referee verification:
-```bash
-python3 -m src_v2.cli.verify_batch --plan "$TARGET/.audit_workspace_v2/audit_plan.json" --get-batch --limit 10 --lease-timeout 1800
-```
-*Creates packaging envelopes in `$TARGET/.audit_workspace_v2/packages/`*
-*Transitions candidate status: `"queued_for_verify" -> "verifying"`*
-
-### Step 5.5: Lease Heartbeat Renewal
-For active long-running verification jobs, periodically renew candidate lease limits:
-```bash
-python3 -m src_v2.cli.verify_batch --plan "$TARGET/.audit_workspace_v2/audit_plan.json" --renew-lease <candidate_id>
-```
-
-### Step 6: Writeback Verdicts
-Apply asymmetric decision policies on parallel referee evaluation votes and commit final verdicts:
-```bash
-python3 -m src_v2.cli.verify_batch --plan "$TARGET/.audit_workspace_v2/audit_plan.json" --writeback <verdicts_file_path>
-```
-*Updates candidate verdicts, syncs `manual_review` queue, and preserves shard/candidate state for subsequent report compilation.*
-
-### Step 7: Compile Reports
-Generate user-facing Markdown reports summarizing findings, backlogs, zero-recall pairs, and phase durations:
-```bash
-python3 -m src_v2.cli.compile_reports --plan "$TARGET/.audit_workspace_v2/audit_plan.json"
-```
-*Creates: `$TARGET/.audit_workspace_v2/reports/{audit_report,coverage_report,review_queue}.md`*
+1. `REQUIREMENTS.md`
+2. `V3_SYSTEM_DESIGN.md`
+3. `V3_SOFTWARE_DESIGN.md`
+4. `V3_TASK_BREAKDOWN.md`
 
 ---
 
-## 📦 Custom Skill Registration (Skill 注册与集成)
+## 📚 What To Read
 
-To integrate this custom skill into your Google Antigravity CLI (`agy`) environment, create a symbolic link from your configurations directory to this directory:
+When working on V3, use the documents in this order:
 
-- **Workspace-specific registration**:
-  Create an `.agents/skills` folder under your project root and link this folder:
-  ```bash
-  mkdir -p .agents/skills
-  ln -s "/path/to/fuzzy-semantic-audit-v2" ".agents/skills/fuzzy-semantic-audit-v2"
-  ```
-- **Global registration**:
-  Alternatively, link globally to your CLI configurations directory:
-  ```bash
-  ln -s "/path/to/fuzzy-semantic-audit-v2" "$HOME/.gemini/config/skills/fuzzy-semantic-audit-v2"
-  ```
+1. `REQUIREMENTS.md`
+2. `V3_SYSTEM_DESIGN.md`
+3. `V3_SOFTWARE_DESIGN.md`
+4. `V3_TASK_BREAKDOWN.md`
+
+These four documents define:
+
+- product goals
+- architecture
+- software/module boundaries
+- executable implementation order
+
+---
+
+## 🛠️ Current Branch Intent
+
+The `v3` branch is intended to be a clean V3 planning and implementation branch.
+
+That means:
+
+1. V2 implementation files should not remain as active branch content.
+2. V3 work should be built under `src_v3/` and `workflows/v3_*`.
+3. Reports, state contracts, fallback semantics, and provider abstractions should follow the V3 documents.
+
+---
+
+## ✅ Implementation Rule
+
+If you are implementing V3 on this branch:
+
+1. follow `V3_TASK_BREAKDOWN.md`
+2. implement one task or one strongly related task group at a time
+3. keep fallback states explicit
+4. do not reintroduce V2-only assumptions such as:
+   - single-language dominance
+   - hidden fallback
+   - direct severity-based candidate deletion
+

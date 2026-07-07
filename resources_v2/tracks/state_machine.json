@@ -1,7 +1,0 @@
-{
-  "track_id": "state_machine",
-  "title": "State Machine Logic",
-  "mapped_cwes": ["841"],
-  "priority": "medium",
-  "default_stance": "falsify_exploit"
-}
