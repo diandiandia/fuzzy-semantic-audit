@@ -7,6 +7,17 @@ try:
 except ImportError:
     TextEmbedding = None
 
+_embedding_model_cache = None
+
+def get_embedding_model():
+    global _embedding_model_cache
+    if _embedding_model_cache is None and TextEmbedding is not None:
+        try:
+            _embedding_model_cache = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+        except Exception:
+            pass
+    return _embedding_model_cache
+
 def is_embedding_available() -> bool:
     """Check if fastembed package and embedding capability is available."""
     return TextEmbedding is not None
@@ -28,7 +39,9 @@ def build_index(shard_id: str, workspace_dir: str, records: List[Dict[str, Any]]
         
         texts = [r.get("text", f"{r.get('name', '')} {r.get('file', '')}") for r in records]
         
-        model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+        model = get_embedding_model()
+        if model is None:
+            return False
         vectors = np.array(list(model.embed(texts)))
         
         # Save metadata and vectors
@@ -75,7 +88,9 @@ def search(shard_id: str, workspace_dir: str, query: str, top_k: int = 10) -> Li
     try:
         import numpy as np
         vectors = np.load(vec_path)
-        model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+        model = get_embedding_model()
+        if model is None:
+            return []
         ivec = np.array(list(model.embed([query])))[0]
         
         norms = np.linalg.norm(vectors, axis=1) * np.linalg.norm(ivec) + 1e-9
