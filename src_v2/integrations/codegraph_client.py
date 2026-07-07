@@ -48,11 +48,28 @@ def find_usages_enclosing_functions(
 ) -> List[Dict[str, Any]]:
     """Search pattern occurrences (using pure python to avoid rg binary dependency), trace back to enclosing functions, and return details."""
     func_regexes = [
-        re.compile(r'^\s*def\s+([A-Za-z0-9_]+)\b'), # Python
-        re.compile(r'^\s*func\s+(?:\([^)]+\)\s+)?([A-Za-z0-9_]+)\b'), # Go
-        re.compile(r'^\s*function\s+([A-Za-z0-9_]+)\b'), # JS/TS
-        re.compile(r'^\s*(?:const|let|var)\s+([A-Za-z0-9_]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_]+)\s*=>'), # JS arrow
-        re.compile(r'^\s*(?:[A-Za-z0-9_]+(?:\s*\*+)?\s+)+([A-Za-z0-9_]+)\s*\('), # C/C++ func
+        # Python: def func_name(...)
+        re.compile(r'^\s*def\s+([A-Za-z0-9_]+)\b'),
+        
+        # Go: func func_name(...) or func (recv) func_name(...)
+        re.compile(r'^\s*func\s+(?:\([^)]+\)\s+)?([A-Za-z0-9_]+)\b'),
+        
+        # JS/TS: function name(...) or async function name(...) or export default function name(...)
+        re.compile(r'(?:^|\s)(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)\b'),
+        
+        # JS/TS arrow/expression assignment: const name = ... or let name = function...
+        re.compile(r'(?:^|\s)(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_]+)?\s*=>'),
+        re.compile(r'(?:^|\s)(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_]+)\s*=\s*(?:async\s*)?function\b'),
+        
+        # JS/TS object property assignment or class shorthand method: name(...) { or async name(...) {
+        re.compile(r'^\s*(?:async\s+)?([A-Za-z0-9_]+)\s*\([^)]*\)\s*(?:\{|$)'),
+        re.compile(r'^\s*([A-Za-z0-9_]+)\s*:\s*(?:async\s*)?(?:function\b|(?:\([^)]*\)|[A-Za-z0-9_]+)?\s*=>)'),
+        
+        # Java/C++/C#: type name(...) { or public type name(...)
+        re.compile(r'(?:public|private|protected|static|final|synchronized|synchronized\s+)?\s*[\w<>\s\[\]]+\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*(?:throws\s+[\w,\s]+)?\s*(?:\{|$)'),
+        
+        # C/C++ global functions
+        re.compile(r'^\s*(?:[A-Za-z0-9_]+(?:\s*\*+)?\s+)+([A-Za-z0-9_]+)\s*\('),
     ]
 
     matches = []
@@ -76,8 +93,8 @@ def find_usages_enclosing_functions(
                     for line_idx, line_text in enumerate(file_obj, 1):
                         if pat_regex.search(line_text):
                             is_self_def = False
-                            for regex in func_regexes[:4]:
-                                m = regex.match(line_text)
+                            for regex in func_regexes:
+                                m = regex.search(line_text)
                                 if m:
                                     defined_name = m.group(1)
                                     if defined_name == pattern or (not is_regex and defined_name in pattern):
@@ -102,10 +119,21 @@ def find_usages_enclosing_functions(
                 start_idx = min(line_num - 1, len(lines) - 1)
                 for idx in range(start_idx, -1, -1):
                     line_text = lines[idx]
+                    trimmed_line = line_text.strip()
+                    if trimmed_line.endswith((';', ',')):
+                        continue
                     for regex in func_regexes:
-                        m = regex.match(line_text)
+                        m = regex.search(line_text)
                         if m:
-                            enclosing_func = m.group(1)
+                            name = m.group(1)
+                            if name in {
+                                "if", "for", "while", "switch", "catch", "with", "function", "class", 
+                                "const", "let", "var", "return", "import", "export", "default", "from", 
+                                "as", "async", "await", "try", "finally", "throw", "new", "delete", 
+                                "typeof", "instanceof", "in", "of", "void"
+                            }:
+                                continue
+                            enclosing_func = name
                             break
                     if enclosing_func:
                         if exclude_name and enclosing_func == exclude_name:

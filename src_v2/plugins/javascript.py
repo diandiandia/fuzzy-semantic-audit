@@ -4,9 +4,27 @@ from typing import List, Dict, Any
 from src_v2.plugins.base import LanguagePlugin
 
 JS_SYMBOL_PATTERNS = [
-    re.compile(r"^\s*(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\("),
-    re.compile(r"^\s*(?:export\s+)?const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>"),
-    re.compile(r"^\s*(?:public|private|protected)?\s*(?:async\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*\{"),
+    # 1. Standard named function: function name(...) or async function name(...) or export default function name(...)
+    re.compile(r"(?:^|\s)(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\("),
+    
+    # 2. Const/let/var function assignment: const name = (...) => or let name = async () => or const name = x =>
+    re.compile(r"(?:^|\s)(?:export\s+)?(?:const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[a-zA-Z_][a-zA-Z0-9_]*)\s*=>"),
+    
+    # 3. Const/let/var standard function expression: const name = function(...) or const name = async function(...)
+    re.compile(r"(?:^|\s)(?:export\s+)?(?:const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:async\s*)?function\b"),
+    
+    # 4. Class methods or object literal shorthand method definitions: async name(...) or name(...) (excluding control flow keywords)
+    # E.g. myMethod(arg) { or async myMethod(arg)
+    re.compile(r"^\s*(?:async\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(?:\{|$)"),
+    
+    # 5. Object property function assignment: name: function(...) or name: async function(...)
+    re.compile(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(?:async\s*)?function\b"),
+    
+    # 6. Object property arrow function assignment: name: (...) => or name: async () => or name: x =>
+    re.compile(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(?:async\s*)?(?:\([^)]*\)|[a-zA-Z_][a-zA-Z0-9_]*)\s*=>"),
+    
+    # 7. Exports/module.exports properties assignment: module.exports.name = function(...) or exports.name = (...) =>
+    re.compile(r"\b(?:module\.)?exports\.([a-zA-Z_][a-zA-Z0-9_]*)\s*="),
 ]
 
 JS_TRACK_RULES = {
@@ -64,8 +82,11 @@ class JavaScriptPlugin:
                     lines = f.readlines()
                 for idx, line in enumerate(lines):
                     line_num = idx + 1
+                    trimmed = line.strip()
+                    if trimmed.startswith(("//", "*", "/*")):
+                        continue
                     for pat in JS_SYMBOL_PATTERNS:
-                        m = pat.match(line)
+                        m = pat.search(line)
                         if m:
                             name = m.group(1)
                             if name in {

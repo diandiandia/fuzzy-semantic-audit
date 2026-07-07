@@ -36,37 +36,87 @@ def build_candidate_package(
         except Exception as e:
             code_snippet = f"Error reading code snippet: {str(e)}"
             
-    # 2. Extract call chain context (heuristic simple grep for generic fallback)
+    # 2. Extract call chain context using codegraph client
+    from src_v2.integrations import codegraph_client
+    
     upstream_callers = []
-    # Search repo files for calls to candidate.symbol
-    # Simple regex search in matched files
-    try:
-        # Scan code files for references
-        symbol_ref = candidate.symbol
-        if symbol_ref and symbol_ref != "file_level_global":
-            for root, dirs, files in os.walk(repo_path):
-                if ".git" in root or ".audit_workspace_v2" in root:
-                    continue
-                for file in files:
-                    if file.endswith((".py", ".js", ".ts", ".go", ".java", ".c", ".cpp", ".h")):
-                        fp = os.path.join(root, file)
-                        rel_fp = os.path.relpath(fp, repo_path)
-                        # Don't search inside the candidate file itself for caller representation
-                        if rel_fp == candidate.file:
-                            continue
+    downstream_callees = []
+    symbol_ref = candidate.symbol
+    
+    if symbol_ref and symbol_ref != "file_level_global":
+        # Upstream callers lookup
+        try:
+            callers = codegraph_client.get_callers(symbol_ref, repo_path)
+            for caller in callers:
+                name = caller.get("name")
+                filepath = caller.get("filePath") or caller.get("file")
+                line = caller.get("line")
+                
+                caller_snippet = ""
+                if filepath:
+                    abs_fp = os.path.join(repo_path, filepath)
+                    if os.path.exists(abs_fp):
                         try:
-                            with open(fp, "r", encoding="utf-8", errors="ignore") as f:
-                                for line_idx, line in enumerate(f):
-                                    if symbol_ref in line:
-                                        upstream_callers.append(f"{rel_fp}:{line_idx + 1} -> {line.strip()}")
-                                        if len(upstream_callers) >= 5:  # Limit to 5 callers
-                                            break
+                            with open(abs_fp, "r", encoding="utf-8", errors="ignore") as f:
+                                lines = f.readlines()
+                                start_line = max(1, line - 5)
+                                end_line = min(len(lines), line + 5)
+                                caller_snippet = "".join(f"    {idx + 1}: {lines[idx]}" for idx in range(start_line - 1, end_line))
                         except:
                             pass
-                if len(upstream_callers) >= 5:
-                    break
-    except:
-        pass
+                
+                upstream_callers.append({
+                    "name": name,
+                    "file": filepath,
+                    "line": line,
+                    "snippet": caller_snippet
+                })
+        except:
+            pass
+
+        # Downstream callees lookup
+        try:
+            callees = codegraph_client.get_callees(symbol_ref, repo_path)
+            for callee in callees:
+                name = callee.get("name")
+                filepath = callee.get("filePath") or callee.get("file")
+                line = callee.get("line")
+                
+                callee_snippet = ""
+                if filepath:
+                    abs_fp = os.path.join(repo_path, filepath)
+                    if os.path.exists(abs_fp):
+                        try:
+                            with open(abs_fp, "r", encoding="utf-8", errors="ignore") as f:
+                                lines = f.readlines()
+                                start_line = max(1, line - 5)
+                                end_line = min(len(lines), line + 5)
+                                callee_snippet = "".join(f"    {idx + 1}: {lines[idx]}" for idx in range(start_line - 1, end_line))
+                        except:
+                            pass
+                
+                downstream_callees.append({
+                    "name": name,
+                    "file": filepath,
+                    "line": line,
+                    "snippet": callee_snippet
+                })
+        except:
+            pass
+
+    upstream_str = "None found"
+    if upstream_callers:
+        lines = []
+        for c in upstream_callers[:5]:
+            lines.append(f"- Caller: `{c['name']}` at `{c['file']}:{c['line']}`\n  Code around call:\n```\n{c['snippet']}```")
+        upstream_str = "\n".join(lines)
+
+    downstream_str = "None found"
+    if downstream_callees:
+        lines = []
+        for c in downstream_callees[:5]:
+            lines.append(f"- Callee: `{c['name']}` at `{c['file']}:{c['line']}`\n  Code around call:\n```\n{c['snippet']}```")
+        downstream_str = "\n".join(lines)
 
     # Find the track info
     cwe_ids = []
@@ -89,8 +139,8 @@ def build_candidate_package(
         "code_snippet": code_snippet,
         "struct_definitions": "None in generic plugin",
         "call_chain_context": {
-            "upstream": "\n".join(upstream_callers) if upstream_callers else "None found",
-            "downstream": "None in generic plugin"
+            "upstream": upstream_str,
+            "downstream": downstream_str
         },
         "entrypoint_candidate": "Unknown"
     }
