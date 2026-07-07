@@ -33,26 +33,36 @@ def glob_to_regex(pattern: str) -> re.Pattern:
             i += 1
     return re.compile('^' + ''.join(regex_parts) + '$')
 
+# Cache repository files listing globally to avoid walking large directory structures repeatedly
+_repo_files_cache = {}
+
+def get_repo_files(repo_path: str) -> List[str]:
+    if repo_path not in _repo_files_cache:
+        files_list = []
+        for root, dirs, files in os.walk(repo_path):
+            if ".git" in root or ".audit_workspace_v2" in root:
+                continue
+            for file in files:
+                full_path = os.path.join(root, file)
+                rel_path = os.path.relpath(full_path, repo_path)
+                files_list.append(rel_path)
+        _repo_files_cache[repo_path] = files_list
+    return _repo_files_cache[repo_path]
+
 def match_glob_patterns(repo_path: str, patterns: List[str]) -> List[str]:
     """Find all files in repo_path matching any glob pattern, supporting recursive **."""
     matched_files = []
     # Pre-compile regexes
     regexes = [glob_to_regex(p) for p in patterns]
     
-    for root, dirs, files in os.walk(repo_path):
-        if ".git" in root or ".audit_workspace_v2" in root:
-            continue
-            
-        for file in files:
-            full_path = os.path.join(root, file)
-            rel_path = os.path.relpath(full_path, repo_path)
-            # Normalize path separators to forward slashes for matching
-            match_path = rel_path.replace('\\', '/')
-            
-            for rx in regexes:
-                if rx.match(match_path):
-                    matched_files.append(rel_path)
-                    break
+    all_files = get_repo_files(repo_path)
+    for rel_path in all_files:
+        # Normalize path separators to forward slashes for matching
+        match_path = rel_path.replace('\\', '/')
+        for rx in regexes:
+            if rx.match(match_path):
+                matched_files.append(rel_path)
+                break
     return matched_files
 
 def run(
