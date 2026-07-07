@@ -72,7 +72,15 @@ class GenericPlugin:
             ".gz", ".mp3", ".mp4", ".wav", ".exe", ".dll", ".so", ".bin", ".db",
             ".woff", ".woff2", ".eot", ".ttf", ".md", ".txt", ".rst", ".html",
             ".xml", ".json", ".yaml", ".yml", ".ini", ".conf", ".toml", ".css",
-            ".scss", ".less", ".map"
+            ".scss", ".less", ".map",
+            # Unsupported programming languages to prevent huge generic rule noise
+            ".rs", ".kt", ".kts",
+            # Build and project configurations
+            ".bp", ".gn", ".gni", ".mk", ".gradle", ".properties",
+            # Interface description & serialization files
+            ".aidl", ".pdl", ".proto", ".thrift", ".hal",
+            # Scripts & command files
+            ".sh", ".bat", ".cmd", ".pl", ".rb"
         }
         for f in repo_files:
             _, ext = os.path.splitext(f)
