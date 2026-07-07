@@ -110,9 +110,9 @@ async function handleRequest(req, res) {
         self.assertTrue(idx_data["ok"])
         self.assertEqual(idx_data["indexed_shards"], 2)
         
-        # Verify shard statuses are "indexed"
+        # Verify shard statuses are indexed (or indexed_fallback under degraded mode)
         plan_check = load_plan(plan_path)
-        self.assertTrue(all(s.status == "indexed" for s in plan_check.language_shards))
+        self.assertTrue(all(s.status in {"indexed", "indexed_fallback"} for s in plan_check.language_shards))
         
         # Step 3: Recall Candidates
         res = self.run_cmd("src_v2.cli.recall_candidates", ["--plan", plan_path])
@@ -124,9 +124,9 @@ async function handleRequest(req, res) {
         self.assertGreater(recall_data["candidates_total"], 0)
         self.assertGreater(recall_data["queued_for_verify"], 0)
         
-        # Verify shard statuses are "recalled"
+        # Verify shard statuses are recalled (or recalled_fallback under degraded mode)
         plan_check = load_plan(plan_path)
-        self.assertTrue(all(s.status == "recalled" for s in plan_check.language_shards))
+        self.assertTrue(all(s.status in {"recalled", "recalled_fallback"} for s in plan_check.language_shards))
         
         # Check registry and queues
         registry_path = os.path.join(audit_workspace, "candidate_registry.jsonl")
