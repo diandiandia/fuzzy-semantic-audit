@@ -10,6 +10,7 @@ resources/catalog.json
 resources/pending_prompts.json
 resources/pending_prompts_simple.json
 .audit_workspace/
+.audit_workspace_v3/
 .audit_temp/
 *.bak
 .claude

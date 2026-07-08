@@ -1,0 +1,12 @@
+track: deserialization
+rules:
+  - id: deserialization.unsafe.pickle
+    pattern: (?i)(unpickle|load|loads|pickle_load)
+    kind: function
+    ast_query: |
+      (function_definition name: (identifier) @name)
+  - id: deserialization.xml.parser
+    pattern: (?i)(parse_xml|xml_load|etree|minidom)
+    kind: function
+    ast_query: |
+      (function_definition name: (identifier) @name)

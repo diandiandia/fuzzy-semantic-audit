@@ -1,0 +1,12 @@
+track: state_machine
+rules:
+  - id: state_machine.transition.unvalidated
+    pattern: (?i)(transition|update_status|change_state|set_status|set_state)
+    kind: function
+    ast_query: |
+      (function_definition name: (identifier) @name)
+  - id: state_machine.field.direct_write
+    pattern: (?i)(status|state|phase|stage|step)
+    kind: function
+    ast_query: |
+      (function_definition name: (identifier) @name)

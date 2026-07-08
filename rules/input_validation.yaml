@@ -1,0 +1,12 @@
+track: input_validation
+rules:
+  - id: input_validation.sanitize.missing
+    pattern: (?i)(validate|check|sanitize|clean|filter|regex|verify_input)
+    kind: function
+    ast_query: |
+      (function_definition name: (identifier) @name)
+  - id: input_validation.parse.unsafe
+    pattern: (?i)(parse|json_parse|xml_parse|yaml_load)
+    kind: function
+    ast_query: |
+      (function_definition name: (identifier) @name)

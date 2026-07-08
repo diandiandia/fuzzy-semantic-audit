@@ -1,0 +1,89 @@
+from typing import List, Dict, Any
+from src_v3.core.models import LanguageShard
+from src_v3.providers.framework.base import FrameworkProvider
+from src_v3.storage.ir_store import IRStore
+
+def enrich_framework_semantics(
+    workspace_dir: str, 
+    shard: LanguageShard, 
+    framework_providers: List[FrameworkProvider]
+) -> None:
+    """
+    Invokes framework providers to extract semantic tags and updates symbol node attributes in the IRStore.
+    """
+    ir_store = IRStore(workspace_dir)
+    
+    # Load all symbol nodes in memory to update them
+    all_symbols = ir_store.get_symbol_nodes()
+    symbols_map = {sn.node_id: sn for sn in all_symbols}
+    
+    updated_count = 0
+    
+    for provider in framework_providers:
+        # 1. Extract entrypoints
+        try:
+            entrypoints = provider.extract_entrypoints(ir_store)
+            for ep in entrypoints:
+                node_id = ep["node_id"]
+                if node_id in symbols_map:
+                    symbols_map[node_id].attributes["framework_entrypoint"] = {
+                        "route": ep["route"],
+                        "method": ep["method"],
+                        "confidence": ep["confidence"],
+                        "provider_name": provider.framework_name
+                    }
+                    updated_count += 1
+        except Exception:
+            pass
+            
+        # 2. Extract guards
+        try:
+            guards = provider.extract_guards(ir_store)
+            for gd in guards:
+                node_id = gd["node_id"]
+                if node_id in symbols_map:
+                    symbols_map[node_id].attributes["framework_guard"] = {
+                        "guard_kind": gd["guard_kind"],
+                        "confidence": gd["confidence"],
+                        "provider_name": provider.framework_name
+                    }
+                    updated_count += 1
+        except Exception:
+            pass
+            
+        # 3. Extract resources
+        try:
+            resources = provider.extract_resources(ir_store)
+            for rs in resources:
+                node_id = rs["node_id"]
+                if node_id in symbols_map:
+                    symbols_map[node_id].attributes["framework_resource"] = {
+                        "resource_type": rs["resource_type"],
+                        "resource_details": rs["resource_details"],
+                        "provider_name": provider.framework_name
+                    }
+                    updated_count += 1
+        except Exception:
+            pass
+            
+        # 4. Extract state transitions
+        try:
+            transitions = provider.extract_state_transitions(ir_store)
+            for ts in transitions:
+                node_id = ts["node_id"]
+                if node_id in symbols_map:
+                    symbols_map[node_id].attributes["framework_state_transition"] = {
+                        "state_field": ts["state_field"],
+                        "from_state": ts["from_state"],
+                        "to_state": ts["to_state"],
+                        "provider_name": provider.framework_name
+                    }
+                    updated_count += 1
+        except Exception:
+            pass
+            
+    # Save the updated symbol nodes back to the IRStore
+    if updated_count > 0:
+        # Retrieve all file nodes (unchanged) and rewrite
+        file_nodes = ir_store.get_file_nodes()
+        ir_store.save(file_nodes + list(symbols_map.values()), [], overwrite=True)
