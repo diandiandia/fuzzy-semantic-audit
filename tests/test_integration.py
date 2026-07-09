@@ -82,19 +82,7 @@ def public_status_check(request):
             cands = [json.loads(l) for l in f if l.strip()]
         self.assertTrue(len(cands) > 0)
         
-        # 3. Verify batch fetching and writeback (decoupled step)
-        verify_script = os.path.join(cli_dir, "verify_batch.py")
-        res_batch = self.run_cmd([verify_script, "--workspace", self.workspace_dir, "--get-batch"])
-        self.assertTrue(res_batch["ok"])
-        self.assertTrue(res_batch["summary"]["fetched_count"] > 0)
-        
-        res_wb = self.run_cmd([verify_script, "--workspace", self.workspace_dir, "--writeback"])
-        self.assertTrue(res_wb["ok"])
-        
-        # 4. Compile final reports with triaged verdicts
-        compile_script = os.path.join(cli_dir, "compile_reports.py")
-        res_rep = self.run_cmd([compile_script, "--workspace", self.workspace_dir])
-        self.assertTrue(res_rep["ok"])
+        # 3. Verify that verification results and reports were compiled during the orchestrated run
         
         # Verify verification results output file
         results_path = os.path.join(self.workspace_dir, "evidence", "verification_results.jsonl")

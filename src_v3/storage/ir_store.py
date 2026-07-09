@@ -22,17 +22,29 @@ class IRStore:
         Saves nodes and edges to respective JSONL files.
         If overwrite is False, appends to the files.
         """
-        if overwrite:
-            # Truncate files to clear existing data
-            for path in [self.files_path, self.symbols_path, self.edges_path]:
-                with open(path, 'w', encoding='utf-8') as f:
-                    pass
-                    
-        mode = 'w' if overwrite else 'a'
-        
         # Split nodes into files and symbols
         file_nodes = [n for n in nodes if n.kind == "file"]
         symbol_nodes = [n for n in nodes if n.kind == "symbol"]
+
+        if overwrite:
+            # If both lists are empty, perform a full clear/reset
+            if not nodes and not edges:
+                for path in [self.files_path, self.symbols_path, self.edges_path]:
+                    with open(path, 'w', encoding='utf-8') as f:
+                        pass
+            else:
+                # Only truncate files that are actually being rewritten
+                if file_nodes:
+                    with open(self.files_path, 'w', encoding='utf-8') as f:
+                        pass
+                if symbol_nodes:
+                    with open(self.symbols_path, 'w', encoding='utf-8') as f:
+                        pass
+                if edges:
+                    with open(self.edges_path, 'w', encoding='utf-8') as f:
+                        pass
+                    
+        mode = 'w' if overwrite else 'a'
         
         # Write files
         if file_nodes:

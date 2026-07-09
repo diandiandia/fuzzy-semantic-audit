@@ -58,15 +58,14 @@ function main() {
     
     const actualWorkspaceDir = initRes.workspace_dir;
     
-    // Step 2-8: Call corresponding CLIs (Placeholders for now)
+    // Step 2-8: Call corresponding CLIs
     const stages = [
         'build_inventory',
         'build_ir',
         'build_index',
         'recall_candidates',
         'prune_candidates',
-        'build_evidence',
-        'compile_reports'
+        'build_evidence'
     ];
     
     for (const stage of stages) {
@@ -88,6 +87,29 @@ function main() {
         }
         console.log(JSON.stringify(res));
     }
+
+    // Phase 8: LLM Triage (verify_batch --get-batch & --writeback)
+    const getBatchRes = runCommand('verify_batch', ['--workspace', actualWorkspaceDir, '--get-batch']);
+    if (!getBatchRes.ok) {
+        console.log(JSON.stringify(getBatchRes));
+        process.exit(1);
+    }
+    console.log(JSON.stringify(getBatchRes));
+
+    const writebackRes = runCommand('verify_batch', ['--workspace', actualWorkspaceDir, '--writeback']);
+    if (!writebackRes.ok) {
+        console.log(JSON.stringify(writebackRes));
+        process.exit(1);
+    }
+    console.log(JSON.stringify(writebackRes));
+
+    // Final Stage: Compile Reports
+    const compileRes = runCommand('compile_reports', ['--workspace', actualWorkspaceDir]);
+    if (!compileRes.ok) {
+        console.log(JSON.stringify(compileRes));
+        process.exit(1);
+    }
+    console.log(JSON.stringify(compileRes));
     
     console.log(JSON.stringify({
         ok: true,

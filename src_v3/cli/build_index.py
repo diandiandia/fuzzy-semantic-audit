@@ -119,6 +119,17 @@ def main():
             semantic_status = "indexed"
             semantic_dir = os.path.join(workspace_dir, "indices", "semantic", shard.shard_id)
             os.makedirs(semantic_dir, exist_ok=True)
+
+            # Check if semantic provider is an unconfigured empty fallback
+            if semantic.provider_name in ["LSPProvider", "LSIFProvider", "CodeGraphProvider"] and semantic.resolution_confidence() == 0.0:
+                # Downgrade to CtagsProvider
+                shard.provider_set["semantic"] = "CtagsProvider"
+                shard.capability = resolve_shard_capability(shard)
+                
+                # Re-instantiate semantic provider as CtagsProvider
+                from src_v3.providers.semantic.ctags_provider import CtagsProvider
+                semantic = CtagsProvider(repo_path, ir_store)
+                degradation_reasons.append(f"Shard {shard.shard_id}: unconfigured LSP/LSIF/CodeGraph provider (confidence=0.0) downgraded to CtagsProvider")
             
             if semantic.provider_name == "CtagsProvider":
                 semantic_status = "indexed_fallback"

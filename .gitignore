@@ -14,3 +14,4 @@ resources/pending_prompts_simple.json
 .audit_temp/
 *.bak
 .claude
+event_log.jsonl

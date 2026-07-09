@@ -90,7 +90,22 @@ def resolve_embedding(config: Dict[str, Any]) -> EmbeddingProvider:
 
 def resolve_frameworks(profile: RepoProfile, lang: str) -> List[Any]:
     """
-    Returns framework providers. Will be fully integrated in P3.
+    Resolves framework providers based on detected frameworks in the RepoProfile
+    and the language of the shard.
     """
-    # Placeholder for framework resolution
-    return []
+    from src_v3.providers.framework.django import DjangoPack
+    from src_v3.providers.framework.express import ExpressPack
+    from src_v3.providers.framework.generic import GenericFrameworkProvider
+
+    providers = []
+    for fw in profile.frameworks:
+        fw_lower = fw.lower()
+        if fw_lower == "django" and lang == "python":
+            providers.append(DjangoPack())
+        elif fw_lower == "express" and lang == "javascript":
+            providers.append(ExpressPack())
+            
+    # Always fall back to GenericFrameworkProvider if no specific framework matches
+    if not providers:
+        providers.append(GenericFrameworkProvider())
+    return providers

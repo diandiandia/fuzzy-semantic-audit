@@ -19,7 +19,7 @@ def run_stage(stage_name: str, args: list) -> dict:
             return {
                 "ok": False,
                 "stage": stage_name,
-                "message": f"CLI exited with code {proc.returncode}. Stderr: {proc.stderr.strip()}"
+                "message": f"CLI exited with code {proc.returncode}. Stderr: {proc.stderr.strip()}. Stdout: {proc.stdout.strip()}"
             }
         try:
             return json.loads(proc.stdout.strip())
@@ -70,8 +70,7 @@ def main():
         "build_index",
         "recall_candidates",
         "prune_candidates",
-        "build_evidence",
-        "compile_reports"
+        "build_evidence"
     ]
     
     for stage in core_stages:
@@ -80,6 +79,26 @@ def main():
             print(json.dumps(res, ensure_ascii=False))
             sys.exit(1)
         print(json.dumps(res, ensure_ascii=False))
+        
+    # Phase 8: LLM Triage (verify_batch get-batch and writeback)
+    res = run_stage("verify_batch", ["--workspace", workspace_dir, "--get-batch"])
+    if not res.get("ok"):
+        print(json.dumps(res, ensure_ascii=False))
+        sys.exit(1)
+    print(json.dumps(res, ensure_ascii=False))
+    
+    res = run_stage("verify_batch", ["--workspace", workspace_dir, "--writeback"])
+    if not res.get("ok"):
+        print(json.dumps(res, ensure_ascii=False))
+        sys.exit(1)
+    print(json.dumps(res, ensure_ascii=False))
+    
+    # 3. Final Stage: Compile Reports
+    res = run_stage("compile_reports", ["--workspace", workspace_dir])
+    if not res.get("ok"):
+        print(json.dumps(res, ensure_ascii=False))
+        sys.exit(1)
+    print(json.dumps(res, ensure_ascii=False))
         
     print(json.dumps({
         "ok": True,

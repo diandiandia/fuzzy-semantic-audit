@@ -64,9 +64,11 @@ def main():
                 "embedding": embedding_prov.provider_name,
                 "framework": "GenericFrameworkProvider"
             }
-            # If the shard has frameworks, assign framework providers
-            if shard.frameworks:
-                shard.provider_set["framework"] = f"{shard.frameworks[0].capitalize()}Pack"
+            # Resolve framework providers using the provider registry
+            from src_v3.core.provider_registry import resolve_frameworks
+            fw_provs = resolve_frameworks(profile, shard.lang)
+            if fw_provs:
+                shard.provider_set["framework"] = fw_provs[0].framework_name
                 
             # Resolve capability
             shard.capability = resolve_shard_capability(shard)
