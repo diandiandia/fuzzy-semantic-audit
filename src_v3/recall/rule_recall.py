@@ -47,7 +47,7 @@ def recall_by_rules(workspace_dir: str, shard: LanguageShard, track: str) -> Lis
     try:
         plan = load_plan(os.path.join(workspace_dir, "audit_plan.json"))
         config = plan.summary.get("config", {})
-        repo_root = plan.summary.get("project_path", os.path.dirname(os.path.abspath(workspace_dir)))
+        repo_root = plan.repo_path if plan.repo_path else os.path.dirname(os.path.abspath(workspace_dir))
     except Exception:
         config = {}
         repo_root = os.path.dirname(os.path.abspath(workspace_dir))

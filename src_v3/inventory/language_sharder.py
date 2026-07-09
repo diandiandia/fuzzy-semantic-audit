@@ -17,8 +17,12 @@ def shard_repository(repo_path: str, profile: RepoProfile) -> List[LanguageShard
     unsupported_files: List[str] = []
     
     for root, dirs, files in os.walk(repo_path):
-        # Modify dirs in-place to avoid hidden or audit workspace directories
-        dirs[:] = [d for d in dirs if not d.startswith(".") and "audit_workspace" not in d]
+        # Modify dirs in-place to avoid hidden, audit workspace, dependency/vendor, and build/generated folders
+        exclude_set = {
+            "node_modules", "venv", ".venv", "env", "vendor", "third_party", "3rdparty",
+            "gen", "generated", "dist", "build", "target", "out", "__pycache__"
+        }
+        dirs[:] = [d for d in dirs if not d.startswith(".") and "audit_workspace" not in d and d.lower() not in exclude_set]
             
         for file in files:
             file_path = os.path.join(root, file)
@@ -31,12 +35,10 @@ def shard_repository(repo_path: str, profile: RepoProfile) -> List[LanguageShard
                 ".mp3", ".mp4", ".wav", ".db", ".sqlite", ".pyc", ".class", ".jar", ".o", ".obj", ".bin", 
                 ".exe", ".dll", ".so", ".dylib", ".woff", ".woff2", ".ttf", ".eot", ".iso", ".dmg", ".pkg", ".pyd"
             }
+            if ext in binary_exts:
+                continue
             from src_v3.parse.file_classifier import FileClassifier
             lang = FileClassifier.classify(file_path)
-            if not lang:
-                if ext in binary_exts:
-                    continue
-                lang = "unsupported"
             
             # Get top level directory
             parts = rel_path.split(os.sep)

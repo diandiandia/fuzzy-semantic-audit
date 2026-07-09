@@ -167,6 +167,10 @@ def main():
                 
             index_store.register_index(shard.shard_id, "semantic", semantic_status, semantic_dir)
             
+            # Resolve effective capability achieved based on actual data outputs produced
+            from src_v3.inventory.capability_resolver import resolve_effective_capability
+            shard.capability = resolve_effective_capability(shard, ir_store, semantic_index_data)
+            
             # Determine Shard final status
             from src_v3.core.state_machine import transition
             if semantic_status == "failed":

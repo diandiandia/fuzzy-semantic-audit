@@ -105,9 +105,9 @@ def resolve_frameworks(profile: RepoProfile, lang: str) -> List[Any]:
         fw_lower = fw.lower()
         if fw_lower == "django" and lang == "python":
             providers.append(DjangoPack())
-        elif fw_lower == "express" and lang == "javascript":
+        elif fw_lower == "express" and lang in ["javascript", "typescript"]:
             providers.append(ExpressPack())
-        elif fw_lower == "spring" and lang == "java":
+        elif fw_lower == "spring" and lang in ["java", "kotlin"]:
             providers.append(SpringPack())
         elif fw_lower == "gin" and lang == "go":
             providers.append(GinPack())

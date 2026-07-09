@@ -62,8 +62,29 @@ def scan_repository(repo_path: str) -> RepoProfile:
 
     # Walk the repository
     for root, dirs, files in os.walk(repo_path):
-        # Modify dirs in-place to avoid walking ignored, hidden, or audit workspace directories
-        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".") and "audit_workspace" not in d]
+        # Determine roles for ALL subdirectories before filtering them out
+        for d in dirs:
+            d_rel_path = os.path.relpath(os.path.join(root, d), repo_path)
+            role = None
+            d_lower = d.lower()
+            if d_lower in {"vendor", "node_modules", "venv", ".venv", "env", "third_party", "3rdparty"}:
+                role = "vendor"
+            elif d_lower in {"gen", "generated", "dist", "build", "target", "out", "__pycache__"}:
+                role = "generated"
+            elif "audit_workspace" in d_lower or d in IGNORE_DIRS:
+                role = "workspace_artifact"
+            elif d_lower in {"test", "tests", "spec", "specs", "__tests__"}:
+                role = "test"
+                
+            if role:
+                directory_roles[d_rel_path] = role
+
+        # Modify dirs in-place to avoid walking ignored, hidden, audit workspace, dependency/vendor, and build/generated folders
+        exclude_set = {
+            "node_modules", "venv", ".venv", "env", "vendor", "third_party", "3rdparty",
+            "gen", "generated", "dist", "build", "target", "out", "__pycache__"
+        }
+        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".") and "audit_workspace" not in d and d.lower() not in exclude_set]
         
         # Calculate relative path
         rel_root = os.path.relpath(root, repo_path)
@@ -81,6 +102,8 @@ def scan_repository(repo_path: str) -> RepoProfile:
         
         if role:
             directory_roles[rel_root] = role
+        else:
+            directory_roles[rel_root] = "source"
             
         for file in files:
             file_path = os.path.join(root, file)
