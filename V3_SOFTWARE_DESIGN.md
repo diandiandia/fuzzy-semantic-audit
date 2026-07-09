@@ -14,6 +14,18 @@
 
 ---
 
+## 1.1 实施口径
+
+本文档中的目录结构和模块边界表示 V3 full implementation 目标形态。
+
+这意味着:
+
+1. 文档中列出的模块默认都属于目标实现范围,不是“可有可无”的示意目录。
+2. 若某模块当前只有占位、stub、fallback 或启发式近似实现,应视为 `partial` 而不是 `done`。
+3. 如果实现阶段采用临时降级方案,必须同步补充状态契约、manifest 语义和报告语义。
+
+---
+
 ## 2. 目录结构
 
 建议 V3 独立目录实现,不要混入 V2 模块:
@@ -137,6 +149,11 @@ fuzzy-semantic-audit/
     v3_compile_reports.js
 ```
 
+说明:
+
+1. `src_v3/parse/file_classifier.py`、`providers/framework/*Pack`、`packs/*` 属于 full implementation 必备模块,不是可长期缺失的占位项。
+2. `packs/languages/`、`packs/semantic/`、`packs/frameworks/`、`packs/tracks/` 必须承载可版本化规则/查询/策略,不能长期只保留空目录或版本文件。
+
 ---
 
 ## 3. 核心数据模型
@@ -194,6 +211,13 @@ fuzzy-semantic-audit/
   "status": "indexed"
 }
 ```
+
+补充约束:
+
+1. `paths` 必须保存为相对 `repo_path` 的真实源码路径。
+2. `provider_set` 记录的是“实际使用的 provider”,不是“理论首选 provider”。
+3. `capability` 必须是 effective capability,不能按 provider 类名推断。
+4. `status` 必须反映真实阶段结果; 解析异常、索引异常、无效 fallback 不得仍写成成功态。
 
 ### 3.4 IR Node
 
@@ -329,6 +353,11 @@ rule_only
 can_transition(kind: str, from_status: str, to_status: str) -> bool
 transition(obj: Any, to_status: str, metadata: dict | None = None) -> Any
 ```
+
+补充约束:
+
+1. `transition()` 不仅要校验状态合法性,还要承担关键降级/失败事件的结构化写回职责。
+2. 阶段内部若发生部分失败,调用方必须显式写入 `metadata` 或 event log,不能只靠 `except: pass` 吞掉。
 
 ---
 
@@ -467,6 +496,32 @@ resolve_semantic(lang: str, config: dict) -> SemanticProvider
 resolve_embedding(config: dict) -> EmbeddingProvider
 resolve_frameworks(profile: RepoProfile, lang: str) -> list[FrameworkProvider]
 ```
+
+### 5.2 Workspace 与 Repo 边界
+
+软件实现必须把源码输入和平面产物严格分开:
+
+1. `audit_plan.json` 中的 `repo_path` 是源码扫描、规则定位、依赖定位、文件读取的唯一根目录。
+2. `workspace_dir` 下的 `ir/`、`indices/`、`candidates/`、`evidence/`、`reports/`、`queues/`、`cache/` 都属于产物目录,不得反向参与 inventory/sharding。
+3. 任何“通过 `workspace_dir` 的父目录推导 repo root”的实现都视为错误实现。
+
+### 5.3 Ignore 规则
+
+inventory 与 sharding 至少必须显式排除以下路径:
+
+1. `.git/`
+2. `.audit_workspace_v3/`
+3. 其他历史审计目录或自定义 workspace 目录
+4. `cache/`、`reports/`、`evidence/packages/` 等运行产物目录
+5. provider 临时索引、导出结果、第三方缓存目录
+
+### 5.4 Effective Capability 写回
+
+实现中必须区分“名义 provider”与“实际能力”:
+
+1. parser fallback 到 regex/text 时,默认 shard status 应保留为结构不足的降级态,不能直接当作稳定 `parsed + L1`。
+2. semantic provider 若仅返回 IR/文本启发式结果,应显式落盘为 semantic fallback。
+3. run manifest 的 `run_capability` 应反映本次运行真实达到的最高有效能力,而不是配置里的理想 provider。
 
 ---
 
@@ -958,4 +1013,3 @@ V3 软件设计的核心不是“继续增加语言特判”,而是:
 5. 用 `run_manifest + event_log + metrics` 保证透明性
 
 这样 V3 才能被实现成一套真正可落地、可扩展、可维护的通用代码审计 skill。
-

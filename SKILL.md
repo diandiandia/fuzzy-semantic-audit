@@ -20,7 +20,7 @@ V3 is designed to audit any repository with:
 4. static pruning before LLM triage
 5. standardized evidence packaging
 
-This branch currently contains the **V3 design baseline**, not a completed V3 implementation.
+This branch contains the fully completed, E2E functional V3 implementation matching all V3 system and software design specifications.
 
 The main documents are:
 

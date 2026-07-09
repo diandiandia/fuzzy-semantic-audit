@@ -71,8 +71,11 @@ def main():
             active_semantics.add(semantic.provider_name)
             active_embeddings.add(embedding.provider_name)
             
-            # Update capability level
-            shard.capability = resolve_shard_capability(shard)
+            # Update capability level (transparently fall back to L0 if parser is using regex/text fallback)
+            if parser.is_fallback_for_lang(shard.lang):
+                shard.capability = CapabilityLevel.L0.value
+            else:
+                shard.capability = resolve_shard_capability(shard)
             
             # 2. Extract symbol texts for embedding indexing
             shard_files = set(shard.paths)

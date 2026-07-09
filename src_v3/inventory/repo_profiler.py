@@ -62,8 +62,8 @@ def scan_repository(repo_path: str) -> RepoProfile:
 
     # Walk the repository
     for root, dirs, files in os.walk(repo_path):
-        # Modify dirs in-place to avoid walking ignored directories
-        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+        # Modify dirs in-place to avoid walking ignored, hidden, or audit workspace directories
+        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".") and "audit_workspace" not in d]
         
         # Calculate relative path
         rel_root = os.path.relpath(root, repo_path)

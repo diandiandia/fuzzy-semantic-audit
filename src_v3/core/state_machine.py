@@ -5,13 +5,14 @@ from src_v3.core.models import LanguageShard, CandidateRecord
 
 # Valid shard transitions
 SHARD_TRANSITIONS = {
-    ShardStatus.DISCOVERED: {ShardStatus.PARSED, ShardStatus.FAILED},
+    ShardStatus.DISCOVERED: {ShardStatus.PARSED, ShardStatus.PARSED_FALLBACK, ShardStatus.FAILED},
     ShardStatus.PARSED: {ShardStatus.INDEXED, ShardStatus.INDEXED_FALLBACK, ShardStatus.FAILED},
+    ShardStatus.PARSED_FALLBACK: {ShardStatus.INDEXED, ShardStatus.INDEXED_FALLBACK, ShardStatus.FAILED},
     ShardStatus.INDEXED: {ShardStatus.RECALLED, ShardStatus.RECALLED_FALLBACK, ShardStatus.PARSED, ShardStatus.FAILED},
     ShardStatus.INDEXED_FALLBACK: {ShardStatus.RECALLED, ShardStatus.RECALLED_FALLBACK, ShardStatus.PARSED, ShardStatus.FAILED},
-    ShardStatus.RECALLED: {ShardStatus.DISCOVERED, ShardStatus.PARSED}, # Allow rerun/reset/rebuild
-    ShardStatus.RECALLED_FALLBACK: {ShardStatus.DISCOVERED, ShardStatus.PARSED},
-    ShardStatus.FAILED: {ShardStatus.DISCOVERED, ShardStatus.PARSED} # Allow retry
+    ShardStatus.RECALLED: {ShardStatus.DISCOVERED, ShardStatus.PARSED, ShardStatus.PARSED_FALLBACK},
+    ShardStatus.RECALLED_FALLBACK: {ShardStatus.DISCOVERED, ShardStatus.PARSED, ShardStatus.PARSED_FALLBACK},
+    ShardStatus.FAILED: {ShardStatus.DISCOVERED, ShardStatus.PARSED, ShardStatus.PARSED_FALLBACK}
 }
 
 # Valid candidate transitions

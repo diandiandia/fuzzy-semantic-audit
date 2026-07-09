@@ -95,6 +95,9 @@ def resolve_frameworks(profile: RepoProfile, lang: str) -> List[Any]:
     """
     from src_v3.providers.framework.django import DjangoPack
     from src_v3.providers.framework.express import ExpressPack
+    from src_v3.providers.framework.spring import SpringPack
+    from src_v3.providers.framework.gin import GinPack
+    from src_v3.providers.framework.android import AndroidPack
     from src_v3.providers.framework.generic import GenericFrameworkProvider
 
     providers = []
@@ -104,6 +107,12 @@ def resolve_frameworks(profile: RepoProfile, lang: str) -> List[Any]:
             providers.append(DjangoPack())
         elif fw_lower == "express" and lang == "javascript":
             providers.append(ExpressPack())
+        elif fw_lower == "spring" and lang == "java":
+            providers.append(SpringPack())
+        elif fw_lower == "gin" and lang == "go":
+            providers.append(GinPack())
+        elif fw_lower == "android" and lang in ["java", "kotlin"]:
+            providers.append(AndroidPack())
             
     # Always fall back to GenericFrameworkProvider if no specific framework matches
     if not providers:
@@ -128,6 +137,9 @@ def resolve_provider_by_name(name: str, config: Dict[str, Any], repo_path: str =
     from src_v3.providers.embedding.cohere_provider import CohereProvider
     from src_v3.providers.framework.django import DjangoPack
     from src_v3.providers.framework.express import ExpressPack
+    from src_v3.providers.framework.spring import SpringPack
+    from src_v3.providers.framework.gin import GinPack
+    from src_v3.providers.framework.android import AndroidPack
     from src_v3.providers.framework.generic import GenericFrameworkProvider
 
     if name == "TreeSitterNativeProvider":
@@ -161,6 +173,12 @@ def resolve_provider_by_name(name: str, config: Dict[str, Any], repo_path: str =
         return DjangoPack()
     elif name == "ExpressPack":
         return ExpressPack()
+    elif name == "SpringPack":
+        return SpringPack()
+    elif name == "GinPack":
+        return GinPack()
+    elif name == "AndroidPack":
+        return AndroidPack()
     elif name == "GenericFrameworkProvider":
         return GenericFrameworkProvider()
         

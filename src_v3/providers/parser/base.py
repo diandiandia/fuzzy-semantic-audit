@@ -42,3 +42,9 @@ class ParserProvider:
         Returns the version string of the provider.
         """
         raise NotImplementedError
+
+    def is_fallback_for_lang(self, lang: str) -> bool:
+        """
+        Returns True if the parser runs in a non-AST fallback/regex mode for this language.
+        """
+        raise NotImplementedError

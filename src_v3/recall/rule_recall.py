@@ -43,19 +43,18 @@ def recall_by_rules(workspace_dir: str, shard: LanguageShard, track: str) -> Lis
     ir_store = IRStore(workspace_dir)
     candidates = []
     
-    # Resolve rules directory relative to workspace parent (repository root)
-    repo_root = os.path.dirname(os.path.abspath(workspace_dir))
-    rules_dir = os.path.join(repo_root, "rules")
-    
-    rules = load_declarative_rules(rules_dir, track)
-    shard_files = set(shard.paths)
-    
-    # Load parser configurations
+    # Load plan configurations and resolve the true repository root path
     try:
         plan = load_plan(os.path.join(workspace_dir, "audit_plan.json"))
         config = plan.summary.get("config", {})
+        repo_root = plan.summary.get("project_path", os.path.dirname(os.path.abspath(workspace_dir)))
     except Exception:
         config = {}
+        repo_root = os.path.dirname(os.path.abspath(workspace_dir))
+        
+    rules_dir = os.path.join(repo_root, "rules")
+    rules = load_declarative_rules(rules_dir, track)
+    shard_files = set(shard.paths)
         
     parser_prov = resolve_parser(shard.lang, config)
     

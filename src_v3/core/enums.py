@@ -15,6 +15,7 @@ class RunMode(str, Enum):
 class ShardStatus(str, Enum):
     DISCOVERED = "discovered"
     PARSED = "parsed"
+    PARSED_FALLBACK = "parsed_fallback"
     INDEXED = "indexed"
     INDEXED_FALLBACK = "indexed_fallback"
     RECALLED = "recalled"

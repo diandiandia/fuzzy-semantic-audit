@@ -97,9 +97,19 @@ def main():
             total_nodes += len(shard_nodes)
             total_edges += len(shard_edges)
             
-            # Progress status of shard
+            # Progress status of shard based on parse error rates
             from src_v3.core.state_machine import transition
-            transition(shard, "parsed", workspace_dir=workspace_dir)
+            from src_v3.core.enums import ShardStatus
+            
+            total_files = len(shard.paths)
+            error_count = sum(1 for node in shard_nodes if node.kind == "file" and "parse_error" in node.attributes)
+            
+            if error_count == total_files:
+                transition(shard, ShardStatus.FAILED.value, workspace_dir=workspace_dir)
+            elif error_count > 0:
+                transition(shard, ShardStatus.PARSED_FALLBACK.value, workspace_dir=workspace_dir)
+            else:
+                transition(shard, ShardStatus.PARSED.value, workspace_dir=workspace_dir)
             
         conn.close()
         

@@ -17,12 +17,8 @@ def shard_repository(repo_path: str, profile: RepoProfile) -> List[LanguageShard
     unsupported_files: List[str] = []
     
     for root, dirs, files in os.walk(repo_path):
-        if ".git" in dirs:
-            dirs.remove(".git")
-        if ".audit_workspace_v3" in dirs:
-            dirs.remove(".audit_workspace_v3")
-        if ".gemini" in dirs:
-            dirs.remove(".gemini")
+        # Modify dirs in-place to avoid hidden or audit workspace directories
+        dirs[:] = [d for d in dirs if not d.startswith(".") and "audit_workspace" not in d]
             
         for file in files:
             file_path = os.path.join(root, file)
@@ -35,7 +31,8 @@ def shard_repository(repo_path: str, profile: RepoProfile) -> List[LanguageShard
                 ".mp3", ".mp4", ".wav", ".db", ".sqlite", ".pyc", ".class", ".jar", ".o", ".obj", ".bin", 
                 ".exe", ".dll", ".so", ".dylib", ".woff", ".woff2", ".ttf", ".eot", ".iso", ".dmg", ".pkg", ".pyd"
             }
-            lang = EXT_TO_LANG.get(ext)
+            from src_v3.parse.file_classifier import FileClassifier
+            lang = FileClassifier.classify(file_path)
             if not lang:
                 if ext in binary_exts:
                     continue

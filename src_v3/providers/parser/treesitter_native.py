@@ -270,3 +270,13 @@ class TreeSitterNativeProvider(ParserProvider):
 
     def provider_version(self) -> str:
         return "1.0.0-fallback"
+
+    def is_fallback_for_lang(self, lang: str) -> bool:
+        if self.use_fallback:
+            return True
+        try:
+            import tree_sitter_languages
+            tree_sitter_languages.get_language(lang)
+            return False
+        except Exception:
+            return True
