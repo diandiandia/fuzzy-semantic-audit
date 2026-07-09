@@ -138,6 +138,29 @@ def main():
             elif semantic.provider_name == "NullProvider":
                 semantic_status = "failed"
                 degradation_reasons.append(f"Shard {shard.shard_id}: semantic provider failed")
+
+            # Run semantic enrichment to populate call graph edges in the IR Store before indexing!
+            from src_v3.enrich.semantic_orchestrator import enrich_semantic_relations
+            enrich_semantic_relations(workspace_dir, repo_path, shard, semantic)
+
+            # Build and serialize the actual semantic index data
+            semantic_index_data = {}
+            for sn in ir_store.get_symbol_nodes():
+                if sn.file in shard_files:
+                    ref_query = {"file": sn.file, "symbol": sn.symbol, "span": sn.span}
+                    semantic_index_data[sn.node_id] = {
+                        "symbol": sn.symbol,
+                        "file": sn.file,
+                        "span": sn.span,
+                        "definitions": semantic.find_definitions(ref_query),
+                        "references": semantic.find_references(ref_query),
+                        "callers": semantic.find_callers(ref_query),
+                        "callees": semantic.find_callees(ref_query)
+                    }
+            
+            index_file = os.path.join(semantic_dir, "semantic_index.json")
+            with open(index_file, 'w', encoding='utf-8') as f:
+                json.dump(semantic_index_data, f, indent=2, ensure_ascii=False)
                 
             index_store.register_index(shard.shard_id, "semantic", semantic_status, semantic_dir)
             
@@ -150,6 +173,16 @@ def main():
             else:
                 transition(shard, ShardStatus.INDEXED.value, workspace_dir=workspace_dir)
                 
+        # Re-populate final active providers from actual post-downgrade shard configurations
+        active_parsers.clear()
+        active_semantics.clear()
+        active_embeddings.clear()
+        for s in plan.language_shards:
+            if s.status != "failed":
+                active_parsers.add(s.provider_set.get("parser", "NullProvider"))
+                active_semantics.add(s.provider_set.get("semantic", "NullProvider"))
+                active_embeddings.add(s.provider_set.get("embedding", "KeywordFallbackProvider"))
+
         # 5. Update overall RunManifest
         if plan.run_manifest:
             manifest = plan.run_manifest

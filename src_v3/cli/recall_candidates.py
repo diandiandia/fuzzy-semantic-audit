@@ -57,11 +57,6 @@ def main():
             
         config = plan.summary.get("config", {})
         
-        # Instantiate framework packs
-        django_pack = DjangoPack()
-        express_pack = ExpressPack()
-        generic_pack = GenericFrameworkProvider()
-        
         all_candidates = []
         
         for shard in plan.language_shards:
@@ -69,18 +64,24 @@ def main():
             if shard.status == ShardStatus.FAILED.value:
                 continue
                 
-            # 1. Resolve semantic provider
-            semantic_provider = resolve_semantic(shard.lang, config, repo_path, ir_store)
+            # 1. Resolve semantic provider from the saved provider_set (inheriting fallback state)
+            from src_v3.core.provider_registry import resolve_provider_by_name
+            semantic_provider_name = shard.provider_set.get("semantic", "NullProvider")
+            raw_provider = resolve_provider_by_name(semantic_provider_name, config, repo_path, ir_store)
+            if not raw_provider:
+                from src_v3.providers.semantic.null_provider import NullProvider
+                raw_provider = NullProvider()
+            from src_v3.providers.semantic.cached_provider import CachedSemanticProvider
+            semantic_provider = CachedSemanticProvider(raw_provider, workspace_dir, shard.shard_id)
             
             # 2. Enrich semantic calling relations
             enrich_semantic_relations(workspace_dir, repo_path, shard, semantic_provider)
             
-            # 3. Enrich framework annotations
-            active_fws = []
-            for pack in [django_pack, express_pack, generic_pack]:
-                if pack.detect(profile.to_dict(), shard.paths):
-                    active_fws.append(pack)
-            enrich_framework_semantics(workspace_dir, shard, active_fws)
+            # 3. Enrich framework annotations based on saved provider_set
+            fw_provider_name = shard.provider_set.get("framework", "GenericFrameworkProvider")
+            fw_provider = resolve_provider_by_name(fw_provider_name, config, repo_path, ir_store)
+            if fw_provider:
+                enrich_framework_semantics(workspace_dir, shard, [fw_provider])
             
             # 4. Perform multi-channel recall
             shard_candidates = orchestrate_recall(workspace_dir, shard, plan.audit_tracks, config)

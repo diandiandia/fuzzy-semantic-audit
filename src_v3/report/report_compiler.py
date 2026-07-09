@@ -7,8 +7,9 @@ from src_v3.storage.candidate_store import CandidateStore
 
 # Import functions from decomposed module files
 from src_v3.report.coverage_report import compile_coverage_report
-from src_v3.report.review_queue import compile_audit_report, compile_review_queue_report
+from src_v3.report.review_queue import compile_review_queue_report
 from src_v3.report.metrics_report import compile_metrics_report
+from src_v3.report.audit_report import compile_audit_report
 
 def write_all_reports(workspace_dir: str) -> None:
     """

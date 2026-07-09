@@ -26,24 +26,12 @@ def extract_features(
     }
     
     # 1. Vendor/Docs/Generated/Test/Mock path decay factor calculation
-    path_lower = candidate.file.lower()
-    decay_factor = 1.0
-    decay_patterns = {
-        "vendor": 0.2,
-        "node_modules": 0.1,
-        "docs": 0.3,
-        "generated": 0.3,
-        "test": 0.4,
-        "mock": 0.4,
-        "fixture": 0.3,
-        "setup": 0.5
-    }
-    for pattern, weight in decay_patterns.items():
-        if pattern in path_lower:
-            decay_factor = min(decay_factor, weight)
+    from src_v3.prune.pack_filters import PackFilters
+    decay_factor = PackFilters.calculate_path_decay(candidate.file)
     features["path_decay_factor"] = decay_factor
     
     # 2. Path relevance based on high-risk folders
+    path_lower = candidate.file.lower()
     is_risk_path = False
     risk_patterns = ["api", "auth", "controller", "route", "security", "core", "main", "src"]
     for rp in risk_patterns:

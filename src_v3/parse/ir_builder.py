@@ -1,7 +1,7 @@
 import os
 import re
 from typing import List, Tuple, Dict, Any
-from src_v3.core.models import IRNode, IREdge
+from src_v3.core.models import IRNode, IREdge, FileNode, SymbolNode, ImportEdge, CallEdge
 from src_v3.providers.parser.base import ParserProvider
 
 GENERATED_SIGNATURES = [
@@ -52,7 +52,7 @@ def normalize_node_id(text: str) -> str:
 
 def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserProvider, query_pack: Dict[str, Any]) -> Tuple[List[IRNode], List[IREdge]]:
     """
-    Parses a single file and builds unified IRNodes and IREdges.
+    Parses a single file and builds unified FileNode, SymbolNode and ImportEdge objects.
     """
     rel_path = os.path.relpath(file_path, repo_path)
     
@@ -66,7 +66,7 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
     
     # 1. Create File Node
     file_node_id = f"file_{normalize_node_id(rel_path)}"
-    file_node = IRNode(
+    file_node = FileNode(
         node_id=file_node_id,
         kind="file",
         lang=lang,
@@ -102,7 +102,7 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
                 "symbol_kind": kind
             })
             
-            sym_node = IRNode(
+            sym_node = SymbolNode(
                 node_id=sym_node_id,
                 kind="symbol",
                 lang=lang,
@@ -130,17 +130,16 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
             imp_name = imp["import_name"]
             source = imp["source"]
             
-            # Normalization of import target node ID. 
-            # In the enrich phase, we will match import_target to actual file nodes.
+            # Normalization of import target node ID
             import_target_id = f"import_{normalize_node_id(source)}"
             
-            edges.append(IREdge(
+            edges.append(ImportEdge(
                 edge_id=f"import_{file_node_id}_{idx}",
                 kind="import",
                 src_node_id=file_node_id,
                 dst_node_id=import_target_id,
                 confidence=1.0,
-                resolution_kind="fuzzy", # Marked fuzzy until resolved in enrich phase
+                resolution_kind="fuzzy",
                 provider_trace=[provider.provider_name]
             ))
             

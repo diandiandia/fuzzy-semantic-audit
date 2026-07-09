@@ -56,3 +56,21 @@ class IndexStore:
         Returns indexing status for all types under a shard.
         """
         return self.registry.get(shard_id, {})
+
+    def load_semantic_index(self, shard_id: str) -> Dict[str, Any]:
+        """
+        Loads the compiled semantic index data for a shard if available.
+        """
+        shard_info = self.registry.get(shard_id, {})
+        sem_info = shard_info.get("semantic", {})
+        if sem_info and sem_info.get("status") in ["indexed", "indexed_fallback"]:
+            idx_rel = sem_info.get("path")
+            if idx_rel:
+                idx_path = os.path.join(self.workspace_dir, idx_rel, "semantic_index.json")
+                if os.path.exists(idx_path):
+                    try:
+                        with open(idx_path, 'r', encoding='utf-8') as f:
+                            return json.load(f)
+                    except Exception:
+                        return {}
+        return {}

@@ -62,10 +62,13 @@ def main():
         total_score = 0
         built_count = 0
         
+        from src_v3.evidence.package_builder import PackageBuilder
+        package_builder = PackageBuilder(workspace_dir)
+        
         for cand in pruned:
             # Assemble evidence package
             bundle = assemble_evidence(workspace_dir, repo_path, cand, ir_store)
-            evidence_store.save_evidence(bundle)
+            rel_path = package_builder.save_package(cand.candidate_id, bundle)
             
             # Transition candidate status based on strict structural and contextual evidence
             has_context = (
@@ -75,7 +78,7 @@ def main():
                 or len(bundle.state_transition_snippets) > 0
             )
             # Explicitly associate candidate with its evidence package relative path
-            cand.evidence_refs = [evidence_store.get_evidence_relative_path(cand.candidate_id)]
+            cand.evidence_refs = [rel_path]
             
             if bundle.symbol_body.strip() and has_context:
                 transition(cand, CandidateStatus.EVIDENCE_READY.value, workspace_dir=workspace_dir)

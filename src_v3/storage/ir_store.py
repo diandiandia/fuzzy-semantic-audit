@@ -22,9 +22,9 @@ class IRStore:
         Saves nodes and edges to respective JSONL files.
         If overwrite is False, appends to the files.
         """
-        # Split nodes into files and symbols
+        # Split nodes into files and symbols/other code elements
         file_nodes = [n for n in nodes if n.kind == "file"]
-        symbol_nodes = [n for n in nodes if n.kind == "symbol"]
+        symbol_nodes = [n for n in nodes if n.kind != "file"]
 
         if overwrite:
             # If both lists are empty, perform a full clear/reset
@@ -48,21 +48,75 @@ class IRStore:
         
         # Write files
         if file_nodes:
-            with open(self.files_path, mode, encoding='utf-8') as f:
+            if overwrite:
+                unique_files = []
+                seen_fids = set()
                 for fn in file_nodes:
-                    f.write(json.dumps(fn.to_dict(), ensure_ascii=False) + "\n")
+                    if fn.node_id not in seen_fids:
+                        seen_fids.add(fn.node_id)
+                        unique_files.append(fn)
+                with open(self.files_path, mode, encoding='utf-8') as f:
+                    for fn in unique_files:
+                        f.write(json.dumps(fn.to_dict(), ensure_ascii=False) + "\n")
+            else:
+                existing_fids = {f.node_id for f in self.get_file_nodes()}
+                unique_files = []
+                for fn in file_nodes:
+                    if fn.node_id not in existing_fids:
+                        existing_fids.add(fn.node_id)
+                        unique_files.append(fn)
+                if unique_files:
+                    with open(self.files_path, mode, encoding='utf-8') as f:
+                        for fn in unique_files:
+                            f.write(json.dumps(fn.to_dict(), ensure_ascii=False) + "\n")
                     
         # Write symbols
         if symbol_nodes:
-            with open(self.symbols_path, mode, encoding='utf-8') as f:
+            if overwrite:
+                unique_syms = []
+                seen_sids = set()
                 for sn in symbol_nodes:
-                    f.write(json.dumps(sn.to_dict(), ensure_ascii=False) + "\n")
+                    if sn.node_id not in seen_sids:
+                        seen_sids.add(sn.node_id)
+                        unique_syms.append(sn)
+                with open(self.symbols_path, mode, encoding='utf-8') as f:
+                    for sn in unique_syms:
+                        f.write(json.dumps(sn.to_dict(), ensure_ascii=False) + "\n")
+            else:
+                existing_sids = {s.node_id for s in self.get_symbol_nodes()}
+                unique_syms = []
+                for sn in symbol_nodes:
+                    if sn.node_id not in existing_sids:
+                        existing_sids.add(sn.node_id)
+                        unique_syms.append(sn)
+                if unique_syms:
+                    with open(self.symbols_path, mode, encoding='utf-8') as f:
+                        for sn in unique_syms:
+                            f.write(json.dumps(sn.to_dict(), ensure_ascii=False) + "\n")
                     
         # Write edges
         if edges:
-            with open(self.edges_path, mode, encoding='utf-8') as f:
+            if overwrite:
+                unique_edges = []
+                seen_edge_ids = set()
                 for ed in edges:
-                    f.write(json.dumps(ed.to_dict(), ensure_ascii=False) + "\n")
+                    if ed.edge_id not in seen_edge_ids:
+                        seen_edge_ids.add(ed.edge_id)
+                        unique_edges.append(ed)
+                with open(self.edges_path, mode, encoding='utf-8') as f:
+                    for ed in unique_edges:
+                        f.write(json.dumps(ed.to_dict(), ensure_ascii=False) + "\n")
+            else:
+                existing_edge_ids = {e.edge_id for e in self.get_edges()}
+                unique_edges = []
+                for ed in edges:
+                    if ed.edge_id not in existing_edge_ids:
+                        existing_edge_ids.add(ed.edge_id)
+                        unique_edges.append(ed)
+                if unique_edges:
+                    with open(self.edges_path, mode, encoding='utf-8') as f:
+                        for ed in unique_edges:
+                            f.write(json.dumps(ed.to_dict(), ensure_ascii=False) + "\n")
 
     def get_file_nodes(self) -> List[IRNode]:
         """

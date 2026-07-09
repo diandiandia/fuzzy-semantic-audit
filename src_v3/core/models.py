@@ -106,7 +106,26 @@ class IRNode:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "IRNode":
-        return cls(
+        kind = data.get("kind", "")
+        target_cls = cls
+        if kind == "file":
+            target_cls = FileNode
+        elif kind == "symbol":
+            target_cls = SymbolNode
+        elif kind == "type_hint":
+            target_cls = TypeHint
+        elif kind == "resource_access":
+            target_cls = ResourceAccess
+        elif kind == "guard_check":
+            target_cls = GuardCheck
+        elif kind == "state_transition":
+            target_cls = StateTransition
+        elif kind == "entrypoint":
+            target_cls = Entrypoint
+        elif kind == "generated_marker":
+            target_cls = GeneratedMarker
+            
+        return target_cls(
             node_id=data.get("node_id", ""),
             kind=data.get("kind", ""),
             lang=data.get("lang", ""),
@@ -131,7 +150,14 @@ class IREdge:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "IREdge":
-        return cls(
+        kind = data.get("kind", "")
+        target_cls = cls
+        if kind == "import":
+            target_cls = ImportEdge
+        elif kind == "call":
+            target_cls = CallEdge
+            
+        return target_cls(
             edge_id=data.get("edge_id", ""),
             kind=data.get("kind", ""),
             src_node_id=data.get("src_node_id", ""),
@@ -264,3 +290,54 @@ class RepoProfile:
             entrypoint_hints=data.get("entrypoint_hints", []),
             risk_directories=data.get("risk_directories", [])
         )
+
+# V3 Structural IR node and edge subclasses
+@dataclass
+class FileNode(IRNode):
+    def __post_init__(self):
+        self.kind = "file"
+
+@dataclass
+class SymbolNode(IRNode):
+    def __post_init__(self):
+        self.kind = "symbol"
+
+@dataclass
+class TypeHint(IRNode):
+    def __post_init__(self):
+        self.kind = "type_hint"
+
+@dataclass
+class ResourceAccess(IRNode):
+    def __post_init__(self):
+        self.kind = "resource_access"
+
+@dataclass
+class GuardCheck(IRNode):
+    def __post_init__(self):
+        self.kind = "guard_check"
+
+@dataclass
+class StateTransition(IRNode):
+    def __post_init__(self):
+        self.kind = "state_transition"
+
+@dataclass
+class Entrypoint(IRNode):
+    def __post_init__(self):
+        self.kind = "entrypoint"
+
+@dataclass
+class GeneratedMarker(IRNode):
+    def __post_init__(self):
+        self.kind = "generated_marker"
+
+@dataclass
+class ImportEdge(IREdge):
+    def __post_init__(self):
+        self.kind = "import"
+
+@dataclass
+class CallEdge(IREdge):
+    def __post_init__(self):
+        self.kind = "call"

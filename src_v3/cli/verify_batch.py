@@ -215,29 +215,15 @@ def main():
                 )
                 new_results.append(res)
                 
-            # Overwrite pruned registry with final status updates
-            candidate_store.upsert_candidates(updated_candidates, pruned=True)
-            
-            # Write to verification_results.jsonl
-            with open(results_path, 'a', encoding='utf-8') as f:
-                for res in new_results:
-                    f.write(json.dumps(res.to_dict(), ensure_ascii=False) + "\n")
-                    
-            # Clear queue verify_now.json
-            queue_store.clear_verify_now()
-            
-            # Deduplicate and save manual review & deferred queues
-            def deduplicate_queue(q_list):
-                seen = set()
-                deduped = []
-                for item in q_list:
-                    cid = item.get("candidate_id")
-                    if cid not in seen:
-                        seen.add(cid)
-                        deduped.append(item)
-                return deduped
-            queue_store.save_manual_review(deduplicate_queue(manual_review_list))
-            queue_store.save_deferred(deduplicate_queue(deferred_list))
+            # Overwrite registry, save results, and update queues via VerificationWriteback
+            from src_v3.verify.writeback import VerificationWriteback
+            writeback_helper = VerificationWriteback(workspace_dir)
+            writeback_helper.perform_writeback(
+                updated_candidates=updated_candidates,
+                new_results=new_results,
+                manual_review_list=manual_review_list,
+                deferred_list=deferred_list
+            )
                 
             duration = time.time() - start_time
             

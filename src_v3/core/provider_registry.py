@@ -41,15 +41,15 @@ def resolve_semantic(lang: str, config: Dict[str, Any], repo_path: str = "", ir_
         if pref == "lsp":
             addr = config.get("lsp_server_address")
             if addr:
-                return LSPProvider(addr)
+                return LSPProvider(addr, repo_path, ir_store)
         elif pref == "lsif":
             lsif_path = config.get("lsif_path")
             if lsif_path:
-                return LSIFProvider(lsif_path)
+                return LSIFProvider(lsif_path, repo_path, ir_store)
         elif pref == "codegraph":
             endpoint = config.get("codegraph_endpoint")
             if endpoint:
-                return CodeGraphProvider(endpoint)
+                return CodeGraphProvider(endpoint, repo_path, ir_store)
         elif pref == "ctags":
             if repo_path and ir_store:
                 return CtagsProvider(repo_path, ir_store)
@@ -109,3 +109,59 @@ def resolve_frameworks(profile: RepoProfile, lang: str) -> List[Any]:
     if not providers:
         providers.append(GenericFrameworkProvider())
     return providers
+
+def resolve_provider_by_name(name: str, config: Dict[str, Any], repo_path: str = "", ir_store: Any = None) -> Any:
+    """
+    Instantiates a provider by its class name, maintaining the degraded state.
+    """
+    from src_v3.providers.parser.treesitter_native import TreeSitterNativeProvider
+    from src_v3.providers.parser.treesitter_wasm import TreeSitterWASMProvider
+    from src_v3.providers.semantic.null_provider import NullProvider
+    from src_v3.providers.semantic.ctags_provider import CtagsProvider
+    from src_v3.providers.semantic.lsif_provider import LSIFProvider
+    from src_v3.providers.semantic.lsp_provider import LSPProvider
+    from src_v3.providers.semantic.codegraph_provider import CodeGraphProvider
+    from src_v3.providers.embedding.keyword_provider import KeywordFallbackProvider
+    from src_v3.providers.embedding.fastembed_provider import FastEmbedProvider
+    from src_v3.providers.embedding.openai_provider import OpenAIProvider
+    from src_v3.providers.embedding.gemini_provider import GeminiProvider
+    from src_v3.providers.embedding.cohere_provider import CohereProvider
+    from src_v3.providers.framework.django import DjangoPack
+    from src_v3.providers.framework.express import ExpressPack
+    from src_v3.providers.framework.generic import GenericFrameworkProvider
+
+    if name == "TreeSitterNativeProvider":
+        return TreeSitterNativeProvider()
+    elif name == "TreeSitterWASMProvider":
+        return TreeSitterWASMProvider()
+    elif name == "LSPProvider":
+        addr = config.get("lsp_server_address", "")
+        return LSPProvider(addr, repo_path, ir_store)
+    elif name == "LSIFProvider":
+        lsif_path = config.get("lsif_path", "")
+        return LSIFProvider(lsif_path, repo_path, ir_store)
+    elif name == "CodeGraphProvider":
+        endpoint = config.get("codegraph_endpoint", "")
+        return CodeGraphProvider(endpoint, repo_path, ir_store)
+    elif name == "CtagsProvider":
+        return CtagsProvider(repo_path, ir_store)
+    elif name == "NullProvider":
+        return NullProvider()
+    elif name == "KeywordFallbackProvider":
+        return KeywordFallbackProvider()
+    elif name == "FastEmbedProvider":
+        return FastEmbedProvider()
+    elif name == "OpenAIProvider":
+        return OpenAIProvider(config.get("openai_api_key", ""))
+    elif name == "GeminiProvider":
+        return GeminiProvider(config.get("gemini_api_key", ""))
+    elif name == "CohereProvider":
+        return CohereProvider(config.get("cohere_api_key", ""))
+    elif name == "DjangoPack":
+        return DjangoPack()
+    elif name == "ExpressPack":
+        return ExpressPack()
+    elif name == "GenericFrameworkProvider":
+        return GenericFrameworkProvider()
+        
+    return None

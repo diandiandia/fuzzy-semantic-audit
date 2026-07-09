@@ -1,6 +1,6 @@
 import os
 from typing import List, Dict, Any
-from src_v3.core.models import LanguageShard, IREdge, IRNode
+from src_v3.core.models import LanguageShard, IREdge, IRNode, CallEdge
 from src_v3.providers.semantic.base import SemanticProvider
 from src_v3.storage.ir_store import IRStore
 
@@ -46,19 +46,8 @@ def enrich_semantic_relations(
                             break
                             
                 if caller_node:
-                    edge_id = f"call_{caller_node.node_id}_{sn.node_id}"
-                    confidence = semantic_provider.resolution_confidence()
-                    res_kind = "exact" if confidence >= 0.7 else "fuzzy"
-                    
-                    new_edges.append(IREdge(
-                        edge_id=edge_id,
-                        kind="call",
-                        src_node_id=caller_node.node_id,
-                        dst_node_id=sn.node_id,
-                        confidence=confidence,
-                        resolution_kind=res_kind,
-                        provider_trace=[semantic_provider.provider_name]
-                    ))
+                    from src_v3.enrich.call_edge_builder import CallEdgeBuilder
+                    new_edges.append(CallEdgeBuilder.build_call_edge(caller_node, sn, semantic_provider))
         except Exception:
             pass
             
@@ -77,19 +66,8 @@ def enrich_semantic_relations(
                             break
                             
                 if callee_node:
-                    edge_id = f"call_{sn.node_id}_{callee_node.node_id}"
-                    confidence = semantic_provider.resolution_confidence()
-                    res_kind = "exact" if confidence >= 0.7 else "fuzzy"
-                    
-                    new_edges.append(IREdge(
-                        edge_id=edge_id,
-                        kind="call",
-                        src_node_id=sn.node_id,
-                        dst_node_id=callee_node.node_id,
-                        confidence=confidence,
-                        resolution_kind=res_kind,
-                        provider_trace=[semantic_provider.provider_name]
-                    ))
+                    from src_v3.enrich.call_edge_builder import CallEdgeBuilder
+                    new_edges.append(CallEdgeBuilder.build_call_edge(sn, callee_node, semantic_provider))
         except Exception:
             pass
 
