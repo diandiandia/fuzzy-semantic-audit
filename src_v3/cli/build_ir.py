@@ -102,11 +102,12 @@ def main():
             from src_v3.core.enums import ShardStatus
             
             total_files = len(shard.paths)
-            error_count = sum(1 for node in shard_nodes if node.kind == "file" and "parse_error" in node.attributes)
+            error_count = sum(1 for node in shard_nodes if node.kind == "file" and ("parse_error" in node.attributes or node.attributes.get("parse_mode") == "failed"))
+            fallback_count = sum(1 for node in shard_nodes if node.kind == "file" and node.attributes.get("parse_mode") in ["python_ast", "regex"])
             
             if error_count == total_files:
                 transition(shard, ShardStatus.FAILED.value, workspace_dir=workspace_dir)
-            elif error_count > 0:
+            elif error_count > 0 or fallback_count > 0:
                 transition(shard, ShardStatus.PARSED_FALLBACK.value, workspace_dir=workspace_dir)
             else:
                 transition(shard, ShardStatus.PARSED.value, workspace_dir=workspace_dir)

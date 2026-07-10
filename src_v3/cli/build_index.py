@@ -175,7 +175,9 @@ def main():
             from src_v3.core.state_machine import transition
             if semantic_status == "failed":
                 transition(shard, ShardStatus.FAILED.value, workspace_dir=workspace_dir)
-            elif semantic_status == "indexed_fallback" or embedding_status == "indexed_fallback":
+            elif (semantic_status == "indexed_fallback" or 
+                  embedding_status == "indexed_fallback" or 
+                  shard.status == ShardStatus.PARSED_FALLBACK.value):
                 transition(shard, ShardStatus.INDEXED_FALLBACK.value, workspace_dir=workspace_dir)
             else:
                 transition(shard, ShardStatus.INDEXED.value, workspace_dir=workspace_dir)
@@ -190,10 +192,21 @@ def main():
                 active_semantics.add(s.provider_set.get("semantic", "NullProvider"))
                 active_embeddings.add(s.provider_set.get("embedding", "KeywordFallbackProvider"))
 
+        # Scan for parser fallback files to append to degradation reasons
+        has_parser_fallback = any(s.status == ShardStatus.INDEXED_FALLBACK.value for s in plan.language_shards)
+        if has_parser_fallback:
+            for s in plan.language_shards:
+                shard_files = set(s.paths)
+                for file_node in ir_store.get_file_nodes():
+                    if file_node.file in shard_files:
+                        p_mode = file_node.attributes.get("parse_mode")
+                        if p_mode in ["python_ast", "regex"]:
+                            degradation_reasons.append(f"Parser downgraded to {p_mode} fallback for {file_node.file}")
+
         # 5. Update overall RunManifest
         if plan.run_manifest:
             manifest = plan.run_manifest
-            if has_fallback_lexical:
+            if has_fallback_lexical or has_parser_fallback:
                 manifest.run_mode = RunMode.LEXICAL_FALLBACK.value
             elif has_fallback_semantic:
                 manifest.run_mode = RunMode.SEMANTIC_FALLBACK.value

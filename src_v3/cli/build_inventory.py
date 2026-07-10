@@ -70,8 +70,9 @@ def main():
             if fw_provs:
                 shard.provider_set["framework"] = fw_provs[0].framework_name
                 
-            # Resolve capability
-            shard.capability = resolve_shard_capability(shard)
+            # Resolve capability (initialize to L0 as no parsing/indexing has run yet)
+            from src_v3.core.enums import CapabilityLevel
+            shard.capability = CapabilityLevel.L0.value
             shard.status = "discovered"
             
         plan.language_shards = shards

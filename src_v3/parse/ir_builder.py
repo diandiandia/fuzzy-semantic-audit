@@ -85,6 +85,9 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
     # Parse file using provider
     try:
         tree = provider.parse_file(file_path, lang)
+        # Store parsing mode and check if fallback was used
+        parse_mode = tree.get("mode") if isinstance(tree, dict) else "unknown"
+        file_node.attributes["parse_mode"] = parse_mode
         
         # 2. Extract symbols
         symbols_data = provider.extract_symbols(tree, query_pack)
@@ -146,5 +149,6 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
     except Exception as e:
         # If parsing fails, we still keep the FileNode but log/trace the error in attributes
         file_node.attributes["parse_error"] = str(e)
+        file_node.attributes["parse_mode"] = "failed"
         
     return nodes, edges
