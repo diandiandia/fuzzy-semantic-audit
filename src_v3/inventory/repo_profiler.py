@@ -32,12 +32,13 @@ ROLE_SIGNATURES = {
     "generated": ["gen", "generated", "dist", "build", "target", "out"]
 }
 
-def scan_repository(repo_path: str) -> RepoProfile:
+def scan_repository(repo_path: str, workspace_dir: str = "") -> RepoProfile:
     """
     Scans the repository to identify languages, build systems, frameworks, 
     directory roles, risk directories, and entrypoint hints.
     """
     repo_path = os.path.abspath(repo_path)
+    abs_workspace = os.path.abspath(workspace_dir) if workspace_dir else ""
     languages: Set[str] = set()
     build_systems: Set[str] = set()
     frameworks: Set[str] = set()
@@ -64,6 +65,13 @@ def scan_repository(repo_path: str) -> RepoProfile:
     for root, dirs, files in os.walk(repo_path):
         # Determine roles for ALL subdirectories before filtering them out
         for d in dirs:
+            d_abs_path = os.path.abspath(os.path.join(root, d))
+            if abs_workspace and d_abs_path == abs_workspace:
+                # Explicitly class workspace directory as workspace_artifact role
+                d_rel_path = os.path.relpath(d_abs_path, repo_path)
+                directory_roles[d_rel_path] = "workspace_artifact"
+                continue
+                
             d_rel_path = os.path.relpath(os.path.join(root, d), repo_path)
             role = None
             d_lower = d.lower()
@@ -84,7 +92,14 @@ def scan_repository(repo_path: str) -> RepoProfile:
             "node_modules", "venv", ".venv", "env", "vendor", "third_party", "3rdparty",
             "gen", "generated", "dist", "build", "target", "out", "__pycache__"
         }
-        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".") and "audit_workspace" not in d and d.lower() not in exclude_set]
+        dirs[:] = [
+            d for d in dirs 
+            if d not in IGNORE_DIRS 
+            and not d.startswith(".") 
+            and "audit_workspace" not in d 
+            and d.lower() not in exclude_set
+            and (not abs_workspace or os.path.abspath(os.path.join(root, d)) != abs_workspace)
+        ]
         
         # Calculate relative path
         rel_root = os.path.relpath(root, repo_path)

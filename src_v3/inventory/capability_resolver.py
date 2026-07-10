@@ -37,10 +37,18 @@ def resolve_effective_capability(shard: LanguageShard, ir_store: IRStore, semant
     # Start at L0 (Text-based)
     effective_cap = CapabilityLevel.L0.value
     
-    # 1. L1 Structural: Must have successfully extracted symbol nodes in the shard files
+    # 1. L1 Structural: Must have successfully extracted symbol nodes using a structured parser (not regex/failed)
     shard_paths_set = set(shard.paths)
-    all_syms = [s for s in ir_store.get_symbol_nodes() if s.file in shard_paths_set and s.kind == "symbol"]
-    if not all_syms:
+    file_nodes = [n for n in ir_store.get_file_nodes() if n.file in shard_paths_set]
+    
+    has_structure = False
+    for fn in file_nodes:
+        p_mode = fn.attributes.get("parse_mode")
+        if p_mode not in ["regex", "failed"]:
+            has_structure = True
+            break
+            
+    if not has_structure:
         return CapabilityLevel.L0.value
         
     effective_cap = CapabilityLevel.L1.value
@@ -56,7 +64,8 @@ def resolve_effective_capability(shard: LanguageShard, ir_store: IRStore, semant
     if has_semantic:
         effective_cap = CapabilityLevel.L2.value
         
-    # 3. L3 Deep Audit: Must have call graph edges or framework entrypoints successfully resolved
+    # 3. L3 Deep Audit: Must have call graph edges or framework entrypoints successfully resolved,
+    # AND the semantic provider must be a true, high-confidence semantic analyzer (not a fallback/simulated provider).
     has_deep = False
     all_edges = ir_store.get_edges()
     call_edges = [e for e in all_edges if e.kind == "call" and ir_store.get_node_by_id(e.src_node_id) and ir_store.get_node_by_id(e.src_node_id).file in shard_paths_set]
@@ -67,7 +76,13 @@ def resolve_effective_capability(shard: LanguageShard, ir_store: IRStore, semant
     if entrypoint_nodes:
         has_deep = True
         
-    if has_deep:
+    sem_prov_name = shard.provider_set.get("semantic", "NullProvider")
+    # All simulated/heuristic providers (LSP, LSIF, CodeGraph) in this codebase are treated as fallbacks
+    is_fallback_sem = (sem_prov_name in ["CtagsProvider", "NullProvider", "LSPProvider", "LSIFProvider", "CodeGraphProvider"])
+    
+    if has_deep and not is_fallback_sem:
         effective_cap = CapabilityLevel.L3.value
+    elif effective_cap == CapabilityLevel.L3.value:
+        effective_cap = CapabilityLevel.L2.value
             
     return effective_cap

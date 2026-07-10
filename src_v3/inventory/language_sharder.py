@@ -3,11 +3,12 @@ from typing import List, Dict, Set
 from src_v3.core.models import LanguageShard, RepoProfile
 from src_v3.inventory.repo_profiler import EXT_TO_LANG
 
-def shard_repository(repo_path: str, profile: RepoProfile) -> List[LanguageShard]:
+def shard_repository(repo_path: str, profile: RepoProfile, workspace_dir: str = "") -> List[LanguageShard]:
     """
     Shards the repository by grouping files by their language and top-level directory.
     """
     repo_path = os.path.abspath(repo_path)
+    abs_workspace = os.path.abspath(workspace_dir) if workspace_dir else ""
     shards: List[LanguageShard] = []
     
     # Group file relative paths by (lang, top_level_dir)
@@ -22,7 +23,13 @@ def shard_repository(repo_path: str, profile: RepoProfile) -> List[LanguageShard
             "node_modules", "venv", ".venv", "env", "vendor", "third_party", "3rdparty",
             "gen", "generated", "dist", "build", "target", "out", "__pycache__"
         }
-        dirs[:] = [d for d in dirs if not d.startswith(".") and "audit_workspace" not in d and d.lower() not in exclude_set]
+        dirs[:] = [
+            d for d in dirs 
+            if not d.startswith(".") 
+            and "audit_workspace" not in d 
+            and d.lower() not in exclude_set
+            and (not abs_workspace or os.path.abspath(os.path.join(root, d)) != abs_workspace)
+        ]
             
         for file in files:
             file_path = os.path.join(root, file)

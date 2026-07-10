@@ -276,6 +276,7 @@ class RepoProfile:
     directory_roles: Dict[str, str] = field(default_factory=dict)
     entrypoint_hints: List[str] = field(default_factory=list)
     risk_directories: List[str] = field(default_factory=list)
+    framework_confidence: Dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
@@ -288,7 +289,8 @@ class RepoProfile:
             frameworks=data.get("frameworks", []),
             directory_roles=data.get("directory_roles", {}),
             entrypoint_hints=data.get("entrypoint_hints", []),
-            risk_directories=data.get("risk_directories", [])
+            risk_directories=data.get("risk_directories", []),
+            framework_confidence=data.get("framework_confidence", {})
         )
 
 # V3 Structural IR node and edge subclasses

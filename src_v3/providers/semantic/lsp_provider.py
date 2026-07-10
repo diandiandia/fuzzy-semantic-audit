@@ -17,7 +17,7 @@ class LSPProvider(SemanticProvider):
         return CapabilityLevel.L3
 
     def resolution_confidence(self) -> float:
-        return 0.95 if self.lsp_server_addr else 0.0
+        return 0.6 if self.lsp_server_addr else 0.0
 
     def find_definitions(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not self.ir_store:

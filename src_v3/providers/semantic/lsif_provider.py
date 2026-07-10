@@ -18,7 +18,7 @@ class LSIFProvider(SemanticProvider):
         return CapabilityLevel.L2
 
     def resolution_confidence(self) -> float:
-        return 0.85 if self.lsif_path else 0.0
+        return 0.6 if self.lsif_path else 0.0
 
     def find_definitions(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not self.ir_store:

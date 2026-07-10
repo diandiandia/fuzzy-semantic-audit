@@ -138,6 +138,10 @@ def main():
                 semantic_status = "indexed_fallback"
                 has_fallback_semantic = True
                 degradation_reasons.append(f"Shard {shard.shard_id}: using CtagsProvider for semantic analysis")
+            elif semantic.provider_name in ["LSPProvider", "LSIFProvider", "CodeGraphProvider"]:
+                semantic_status = "indexed_fallback"
+                has_fallback_semantic = True
+                degradation_reasons.append(f"Shard {shard.shard_id}: using heuristic simulated {semantic.provider_name} fallback (no live backend connection)")
             elif semantic.provider_name == "NullProvider":
                 semantic_status = "failed"
                 degradation_reasons.append(f"Shard {shard.shard_id}: semantic provider failed")

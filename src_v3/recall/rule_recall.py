@@ -52,8 +52,25 @@ def recall_by_rules(workspace_dir: str, shard: LanguageShard, track: str) -> Lis
         config = {}
         repo_root = os.path.dirname(os.path.abspath(workspace_dir))
         
-    rules_dir = os.path.join(repo_root, "rules")
-    rules = load_declarative_rules(rules_dir, track)
+    # 1. Resolve tool-bundled rules directory
+    tool_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    tool_rules_dir = os.path.join(tool_root, "rules")
+    
+    # 2. Resolve project-specific rules directory
+    repo_rules_dir = os.path.join(repo_root, "rules")
+    
+    # Load rules from both locations and combine them (deduplicated by rule ID)
+    rules_list = []
+    seen_rule_ids = set()
+    for r_dir in [tool_rules_dir, repo_rules_dir]:
+        if os.path.exists(r_dir):
+            for r in load_declarative_rules(r_dir, track):
+                r_id = r.get("id")
+                if r_id and r_id not in seen_rule_ids:
+                    seen_rule_ids.add(r_id)
+                    rules_list.append(r)
+                    
+    rules = rules_list
     shard_files = set(shard.paths)
         
     parser_prov = resolve_parser(shard.lang, config)

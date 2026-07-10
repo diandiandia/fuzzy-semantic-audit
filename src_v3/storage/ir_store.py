@@ -181,3 +181,55 @@ class IRStore:
             if sn.node_id == node_id:
                 return sn
         return None
+
+    def get_nodes_by_kind(self, kind: str) -> List[IRNode]:
+        """
+        Queries all nodes matching the specified kind (e.g. 'file', 'symbol', 'entrypoint', 'guard_check', etc.).
+        """
+        if kind == "file":
+            return self.get_file_nodes()
+        results = []
+        for sn in self.iter_symbol_nodes():
+            if sn.kind == kind:
+                results.append(sn)
+        return results
+
+    def get_symbols_by_name(self, symbol_name: str) -> List[IRNode]:
+        """
+        Queries all symbol nodes matching the specified symbol name.
+        """
+        results = []
+        for sn in self.iter_symbol_nodes():
+            if sn.symbol == symbol_name:
+                results.append(sn)
+        return results
+
+    def get_edges_by_kind(self, kind: str) -> List[IREdge]:
+        """
+        Queries all edges matching the specified edge kind (e.g. 'contain', 'import', 'call').
+        """
+        results = []
+        for ed in self.iter_edges():
+            if ed.kind == kind:
+                results.append(ed)
+        return results
+
+    def get_edges_by_source(self, src_node_id: str) -> List[IREdge]:
+        """
+        Queries all edges originating from the specified source node ID.
+        """
+        results = []
+        for ed in self.iter_edges():
+            if ed.src_node_id == src_node_id:
+                results.append(ed)
+        return results
+
+    def get_edges_by_destination(self, dst_node_id: str) -> List[IREdge]:
+        """
+        Queries all edges pointing to the specified destination node ID.
+        """
+        results = []
+        for ed in self.iter_edges():
+            if ed.dst_node_id == dst_node_id:
+                results.append(ed)
+        return results

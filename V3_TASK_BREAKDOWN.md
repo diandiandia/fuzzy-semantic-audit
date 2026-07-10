@@ -44,13 +44,18 @@
 | P4 Prune / Evidence / Verify | `partial` | 有可运行流程,但仍是简化版本,离 full V3 的证据与裁判机制有差距。 |
 | P5 Report / Workflow / E2E | `partial` | workflow/report/test 已有基础,但尚未形成完整回归、性能、黄金样例交付。 |
 
+截至 `2026-07-10` 按任务 DoD 重新校准:
+
+- 已 100% 完成开发: `T04`、`T05`、`T08`、`T13`、`T14`、`T16`、`T17`、`T18`、`T22`、`T28`、`T29`、`T33`、`T35`、`T36`、`T40`、`T42`、`T43`、`T44`、`T46`、`T47`
+- 尚未 100% 完成开发: `T01-T03`、`T06-T07`、`T09-T12`、`T15`、`T19-T21`、`T23-T27`、`T30-T32`、`T34`、`T37-T39`、`T41`、`T45`、`T48-T72`
+
 当前优先级最高的缺口:
 
 1. 修正 `repo_path` / `workspace_dir` 边界,禁止把 workspace 或历史产物重新扫入源码面。
 2. 修正 effective capability 判定,禁止把 regex/text fallback 伪装成 `L1/L2/L3`。
-3. 补齐缺失模块: `file_classifier.py`、`Spring/Gin/Android` packs、`packs/semantic`、`packs/frameworks`、`packs/tracks`。
-4. 将现有 stub provider 从“文件存在”升级为“真实实现或明确 fallback 契约”。
-5. 以 full implementation 标准重验 P0-P5 DoD,而不是按“脚本能跑通”判完成。
+3. 将 `LSP/LSIF/CodeGraph` 等 provider 从“启发式近似实现”升级为“真实后端集成 + 明确 fallback 契约”。
+4. 将 `packs/semantic`、`packs/frameworks`、`packs/tracks` 从 registry 常量升级为可版本化规则/查询/策略包。
+5. 完成回归样例、黄金基线、性能验证,并按 full implementation 标准重验 P0-P5 DoD。
 
 ---
 
@@ -152,14 +157,14 @@
 
 ### P0 当前判断
 
-- T01 `partial`: 主目录已建成,但与 `V3_SOFTWARE_DESIGN.md` 仍未完全一致,缺失 `file_classifier.py` 及部分 framework/pack 模块。
+- T01 `partial`: 主目录与核心文件已建成,但 `packs/semantic`、`packs/frameworks`、`packs/tracks` 仍未按文档要求落成可版本化 pack 体系。
 - T02 `partial`: 核心模型存在,但 effective capability 与部分状态语义仍需靠实现契约补强。
 - T03 `partial`: 状态机已存在,但调用侧仍有“异常吞掉但状态成功”的问题。
 - T04 `done`: plan/run manifest 读写可用。
 - T05 `done`: event log / metrics 基础可用。
 - T06 `partial`: sqlite 与 store 存在,但仍需按 full implementation 补版本/约束验证。
 - T07 `partial`: 可初始化 workspace,但边界约束与自定义 workspace 场景需要补验。
-- T08 `partial`: workflow 已存在,但当前更接近可运行骨架而非完整 orchestration contract。
+- T08 `done`: workflow 骨架与 JSON contract 已建立。
 
 ### P1 当前判断
 
@@ -168,10 +173,10 @@
 - T11 `partial`: sharder 可切 shard,但目前仍可能把历史工作区与产物纳入 shard。
 - T12 `partial`: capability resolver 存在,但 effective capability 判定不符合 full V3 要求。
 - T13 `done`: parser provider base 已建立。
-- T14 `partial`: native provider 存在,但 fallback 后能力语义需要补正。
+- T14 `done`: native provider 已满足“至少一门语言解析 + 返回 parser tree + 暴露 fallback mode”的 DoD。
 - T15 `partial`: WASM provider 已建文件,需按 DoD 补足一致性验证。
-- T16 `partial`: query loader 存在,但 pack 体系尚未完整落地。
-- T17 `partial`: IR builder 可产出基础 IR,但解析失败和弱 fallback 的写回语义不完整。
+- T16 `done`: query loader 已支持按语言加载 `.scm` 与返回版本。
+- T17 `done`: IR builder 已稳定产出 `FileNode` / `SymbolNode` / `ImportEdge` 与基础属性。
 - T18 `done`: IR cache 基础可用。
 - T19 `partial`: IR store 可用,但查询面与 full implementation 目标仍有差距。
 - T20 `partial`: inventory CLI 可跑,但 repo/workspace 边界未达标。
@@ -179,19 +184,29 @@
 
 ### P2 当前判断
 
-- T22-T29 `partial`: base/null/ctags/keyword 等已具备基础形态。
+- T22 `done`: semantic provider base 已满足统一接口与 capability/confidence 契约。
+- T23 `partial`: `NullProvider` 存在,但低能力等级语义仍偏松。
+- T24 `partial`: `CtagsProvider` 可用,但仍属启发式近似实现。
 - T25-T27 `partial`: `CodeGraphProvider`、`LSIFProvider`、`LSPProvider` 当前仍包含较多启发式近似逻辑,未达到“真实后端集成 + 明确 fallback”目标。
-- T30-T31 `todo`: 本地/云 embedding 真实能力仍未完成,现有云 provider 多为 stub。
+- T28 `done`: embedding provider base 已建立。
+- T29 `done`: `KeywordFallbackProvider` 已满足 lexical fallback DoD。
+- T30-T31 `partial`: provider 文件已存在,但本地/云 embedding 真实能力仍未完成,现有实现以 stub 为主。
 - T32 `partial`: registry 已存在,但 provider 选择与有效能力语义仍需修正。
-- T33 `partial`: index store 存在,需继续补强契约。
+- T33 `done`: index store 已支持 `indexed/indexed_fallback` 记录与按 shard 查询。
 - T34 `partial`: build_index 可跑,但 run_capability / degradation 语义还需对齐设计。
 
 ### P3 当前判断
 
 - T35-T36 `done`: framework base 与 generic provider 已存在。
-- T37 `partial`: 仅 `DjangoPack`、`ExpressPack` 有实现,`Spring/Gin/Android` 缺失。
+- T37 `partial`: `Django/Express/Spring/Gin/Android` 文件均已存在,但多个 pack 仍只覆盖单一类别,未稳定满足 DoD。
 - T38-T39 `partial`: enrich 主链路存在,但仍需补强真实语义和框架节点契约。
-- T40-T46 `partial`: recall 全链路已搭起,但 packs 缺失、规则路径边界错误、启发式比例偏高。
+- T40 `done`: recall normalizer 已满足 `identity_key` 去重与多来源合并 DoD。
+- T41 `partial`: rule recall 可运行,但规则路径仍依赖被审计 repo 内 `rules/`,与当前 skill 自带规则布局不一致。
+- T42 `done`: vector recall 已支持 lexical fallback 且 trace 可见。
+- T43 `done`: graph recall 已支持 exact/fuzzy edge 参与并做 shard/file 过滤。
+- T44 `done`: resource recall 已限制到相关 tracks。
+- T45 `partial`: framework recall 可运行,但结果中未稳定保留文档要求的 `framework_trace` 语义。
+- T46 `done`: recall orchestrator 已统一调度通道、记录零召回组合与通道统计。
 - T47 `done`: candidate store 基础可用。
 - T48 `partial`: recall CLI 可运行,但离 full V3 recall 质量尚有差距。
 

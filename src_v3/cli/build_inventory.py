@@ -36,11 +36,12 @@ def main():
         repo_path = plan.repo_path
         
         # 1. Scan repo and build RepoProfile
-        profile = scan_repository(repo_path)
+        profile = scan_repository(repo_path, workspace_dir)
         
         # 2. Detect frameworks
-        detected_fws = detect_frameworks(repo_path, profile)
-        profile.frameworks = detected_fws
+        detected_fws_dict = detect_frameworks(repo_path, profile)
+        profile.frameworks = sorted(list(detected_fws_dict.keys()))
+        profile.framework_confidence = detected_fws_dict
         
         # Save profile
         profile_path = os.path.join(workspace_dir, plan.repo_profile_path)
@@ -48,7 +49,7 @@ def main():
             json.dump(profile.to_dict(), f, indent=2, ensure_ascii=False)
             
         # 3. Shard repository
-        shards = shard_repository(repo_path, profile)
+        shards = shard_repository(repo_path, profile, workspace_dir)
         
         # 4. Resolve capability for each shard and assign provider set
         from src_v3.core.provider_registry import resolve_parser, resolve_semantic, resolve_embedding
