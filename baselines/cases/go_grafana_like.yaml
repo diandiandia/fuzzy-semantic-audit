@@ -1,0 +1,16 @@
+case_id: go_grafana_api_authz_001
+repo_id: grafana
+description: "HTTP API handler missing required role authentication check."
+query:
+  cwe:
+    - CWE-863
+expected:
+  must_retrieve:
+    - path: pkg/api/api.go
+      symbol: Route
+    - path: pkg/middleware/auth.go
+      symbol: EnsureUserLoggedIn
+  should_rank_top_k: 10
+metrics:
+  min_recall_at_20: 0.8
+  max_candidates_after_prune: 50

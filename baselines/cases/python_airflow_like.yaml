@@ -1,0 +1,16 @@
+case_id: python_airflow_dag_validation_001
+repo_id: airflow
+description: "DAG definition files parsed without correct validation checks."
+query:
+  cwe:
+    - CWE-862
+expected:
+  must_retrieve:
+    - path: airflow/models/dag.py
+      symbol: DAG
+    - path: airflow/utils/dag_processing.py
+      symbol: process_file
+  should_rank_top_k: 10
+metrics:
+  min_recall_at_20: 0.8
+  max_candidates_after_prune: 50

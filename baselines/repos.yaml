@@ -1,0 +1,39 @@
+repos:
+  - id: airflow
+    name: apache/airflow
+    language_mix:
+      - python
+    type: open_source
+    purpose:
+      - workflow
+      - authorization
+      - dataflow
+    enabled: false
+    notes: "Large Python baseline for scheduling, DAG, auth and config-flow analysis."
+
+  - id: grafana
+    name: grafana/grafana
+    language_mix:
+      - go
+      - typescript
+    type: open_source
+    purpose:
+      - backend_frontend
+      - access_control
+      - api_surface
+    enabled: false
+    notes: "Large mixed Go/TS baseline for cross-service and access-control analysis."
+
+  - id: supabase
+    name: supabase/supabase
+    language_mix:
+      - typescript
+      - sql
+      - postgres
+    type: open_source
+    purpose:
+      - multi_service
+      - database_policy
+      - api_auth
+    enabled: false
+    notes: "Monorepo-like baseline for auth, policies, SQL and service integration."

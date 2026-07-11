@@ -8,8 +8,8 @@ SHARD_TRANSITIONS = {
     ShardStatus.DISCOVERED: {ShardStatus.PARSED, ShardStatus.PARSED_FALLBACK, ShardStatus.FAILED},
     ShardStatus.PARSED: {ShardStatus.INDEXED, ShardStatus.INDEXED_FALLBACK, ShardStatus.FAILED},
     ShardStatus.PARSED_FALLBACK: {ShardStatus.INDEXED, ShardStatus.INDEXED_FALLBACK, ShardStatus.FAILED},
-    ShardStatus.INDEXED: {ShardStatus.RECALLED, ShardStatus.RECALLED_FALLBACK, ShardStatus.PARSED, ShardStatus.FAILED},
-    ShardStatus.INDEXED_FALLBACK: {ShardStatus.RECALLED, ShardStatus.RECALLED_FALLBACK, ShardStatus.PARSED, ShardStatus.FAILED},
+    ShardStatus.INDEXED: {ShardStatus.RECALLED, ShardStatus.RECALLED_FALLBACK, ShardStatus.PARSED, ShardStatus.PARSED_FALLBACK, ShardStatus.FAILED},
+    ShardStatus.INDEXED_FALLBACK: {ShardStatus.RECALLED, ShardStatus.RECALLED_FALLBACK, ShardStatus.PARSED, ShardStatus.PARSED_FALLBACK, ShardStatus.FAILED},
     ShardStatus.RECALLED: {ShardStatus.DISCOVERED, ShardStatus.PARSED, ShardStatus.PARSED_FALLBACK},
     ShardStatus.RECALLED_FALLBACK: {ShardStatus.DISCOVERED, ShardStatus.PARSED, ShardStatus.PARSED_FALLBACK},
     ShardStatus.FAILED: {ShardStatus.DISCOVERED, ShardStatus.PARSED, ShardStatus.PARSED_FALLBACK}

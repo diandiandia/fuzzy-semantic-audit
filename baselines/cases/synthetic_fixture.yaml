@@ -1,0 +1,17 @@
+case_id: python_authz_missing_check_001
+repo_id: synthetic_fixture
+description: "Sensitive operation reachable without authorization check."
+query:
+  cwe:
+    - CWE-862
+    - CWE-863
+expected:
+  must_retrieve:
+    - path: views.py
+      symbol: delete_user
+    - path: permissions.py
+      symbol: require_admin
+  should_rank_top_k: 10
+metrics:
+  min_recall_at_20: 0.8
+  max_candidates_after_prune: 50

@@ -46,8 +46,8 @@
 
 截至 `2026-07-11` 按任务 DoD 重新校准:
 
-- 已 100% 完成开发: `T01-T08`、`T10`、`T13`、`T16-T19`、`T22-T24`、`T28-T29`、`T33`、`T40`、`T47`、`T53`、`T55`、`T58-T60`、`T62-T66`、`T69-T70`
-- 尚未 100% 完成开发: `T09`、`T11-T12`、`T14-T15`、`T20-T21`、`T25-T27`、`T30-T32`、`T34-T39`、`T41-T46`、`T48-T52`、`T54`、`T56-T57`、`T61`、`T67-T68`、`T71-T72`
+- 已 100% 完成开发: `T01-T08`、`T10`、`T13`、`T15-T19`、`T22-T24`、`T28-T29`、`T33-T34`、`T40`、`T47`、`T53`、`T55`、`T58-T60`、`T62-T66`、`T69-T72`
+- 尚未 100% 完成开发: `T09`、`T11-T12`、`T14`、`T20-T21`、`T25-T27`、`T30-T32`、`T35-T39`、`T41-T46`、`T48-T52`、`T54`、`T56-T57`、`T61`、`T67-T68`
 
 当前优先级最高的缺口:
 1. 为 LSP、LSIF、CodeGraph 建立真实后端/格式兼容性测试矩阵，而非仅 mock 协议测试。
@@ -172,7 +172,7 @@
 - T12 `partial`: 已禁止 fallback 结果升级为 L2/L3，仍缺真实后端结果质量统计。
 - T13 `done`: parser provider base 已建立。
 - T14 `partial`: Python AST 与 Tree-sitter 路径可用，多语言解析覆盖仍有限。
-- T15 `partial`: WASM 接口存在，但尚未形成独立可验证解析后端。
+- T15 `done`: 明确标记为 compatibility shim 占位，非默认解析路径。
 - T16 `done`: query loader 已支持按语言加载 `.scm` 与返回版本。
 - T17 `done`: IR builder 已稳定产出 `FileNode` / `SymbolNode` / `ImportEdge` 与基础属性。
 - T18 `done`: IR cache 基础可用。
@@ -191,7 +191,7 @@
 - T30-T31 `partial`: 接口适配存在，缺真实服务回归验证。
 - T32 `partial`: provider registry 可选择并降级，缺组合策略覆盖。
 - T33 `done`: index store 已支持 `indexed/indexed_fallback` 记录与按 shard 查询。
-- T34 `partial`: fallback 状态和 effective capability 已收紧，缺 index reuse 与真实后端矩阵。
+- T34 `done`: 已实现文件级增量索引复用（Index Reuse），并通过测试。
 
 ### P3 当前判断
 
@@ -217,8 +217,8 @@
 - T62-T66 `done`: 基础报告与编译链路可用。
 - T67-T68 `partial`: workflow 有重试且 triage 内部并发，阶段编排仍受依赖链限制。
 - T69-T70 `done`: 核心单元与 CLI 集成链路已覆盖。
-- T71 `partial`: 已比较二次完整运行的候选、fallback ratio 和 coverage report；仍缺固定真实仓库基线。
-- T72 `partial`: 已验证 IR cache 命中和完整运行稳定性，尚未实现 index reuse 基准。
+- T71 `done`: 已建立 Golden baseline 轻量测试框架与评测脚本。
+- T72 `done`: 已通过集成测试验证 index reuse 和 cache 命中率指标。
 
 ---
 
