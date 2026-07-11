@@ -1,6 +1,6 @@
 {
-  "route_patterns": [],
-  "guard_patterns": [],
-  "resource_patterns": [],
-  "state_machine_patterns": []
+  "route_patterns": ["handler", "route", "controller", "api", "get_", "post_", "put_", "delete_", "serve"],
+  "guard_patterns": ["auth", "guard", "check", "verify", "login", "permission", "validate", "require", "session"],
+  "resource_patterns": ["db", "sql", "query", "save", "insert", "delete", "update", "select", "file", "read", "write", "connect", "send", "recv", "publish", "consume"],
+  "state_machine_patterns": ["status", "state", "transition", "step", "phase", "stage", "progress"]
 }

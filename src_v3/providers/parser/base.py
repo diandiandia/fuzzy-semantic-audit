@@ -15,25 +15,48 @@ class ParserProvider:
     def extract_symbols(self, tree: Any, query_pack: Any) -> List[Dict[str, Any]]:
         """
         Extracts symbols from the parsed tree using query rules.
-        Returns a list of symbols with fields:
-        {
-            "symbol": str,
-            "kind": str, # e.g. function, class, method
-            "span": {"start": int, "end": int}, # Line numbers (1-indexed or 0-indexed, let's use 1-indexed)
-            "attributes": dict
-        }
         """
         raise NotImplementedError
 
     def extract_imports(self, tree: Any, query_pack: Any) -> List[Dict[str, Any]]:
         """
         Extracts import statements / module dependencies.
-        Returns a list of imports with fields:
-        {
-            "import_name": str,
-            "source": str,
-            "span": {"start": int, "end": int}
-        }
+        """
+        raise NotImplementedError
+
+    def extract_calls(self, tree: Any, query_pack: Any) -> List[Dict[str, Any]]:
+        """
+        Extracts call expressions / dependencies.
+        """
+        raise NotImplementedError
+
+    def extract_type_hints(self, tree: Any, query_pack: Any) -> List[Dict[str, Any]]:
+        """
+        Extracts type annotations/hints.
+        """
+        raise NotImplementedError
+
+    def extract_resources(self, tree: Any, query_pack: Any) -> List[Dict[str, Any]]:
+        """
+        Extracts external resource access points.
+        """
+        raise NotImplementedError
+
+    def extract_guards(self, tree: Any, query_pack: Any) -> List[Dict[str, Any]]:
+        """
+        Extracts security/authentication checks.
+        """
+        raise NotImplementedError
+
+    def extract_states(self, tree: Any, query_pack: Any) -> List[Dict[str, Any]]:
+        """
+        Extracts state machine modifications.
+        """
+        raise NotImplementedError
+
+    def extract_entrypoints(self, tree: Any, query_pack: Any) -> List[Dict[str, Any]]:
+        """
+        Extracts entrypoint annotations, routes, or handlers.
         """
         raise NotImplementedError
 

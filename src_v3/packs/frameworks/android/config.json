@@ -1,6 +1,6 @@
 {
-  "route_patterns": [],
-  "guard_patterns": [],
-  "resource_patterns": [],
-  "state_machine_patterns": []
+  "route_patterns": ["Activity", "Fragment", "Intent", "onCreate"],
+  "guard_patterns": ["Permission", "checkPermission", "biometric", "Keystore"],
+  "resource_patterns": ["SQLiteDatabase", "Room", "SharedPreferences", "ContentProvider"],
+  "state_machine_patterns": ["state", "status", "save", "commit"]
 }

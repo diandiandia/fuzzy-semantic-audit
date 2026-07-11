@@ -1,7 +1,10 @@
 import os
 import re
 from typing import List, Tuple, Dict, Any
-from src_v3.core.models import IRNode, IREdge, FileNode, SymbolNode, ImportEdge, CallEdge
+from src_v3.core.models import (
+    IRNode, IREdge, FileNode, SymbolNode, ImportEdge, CallEdge,
+    TypeHint, ResourceAccess, GuardCheck, StateTransition, Entrypoint
+)
 from src_v3.providers.parser.base import ParserProvider
 
 GENERATED_SIGNATURES = [
@@ -52,7 +55,7 @@ def normalize_node_id(text: str) -> str:
 
 def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserProvider, query_pack: Dict[str, Any]) -> Tuple[List[IRNode], List[IREdge]]:
     """
-    Parses a single file and builds unified FileNode, SymbolNode and ImportEdge objects.
+    Parses a single file and builds unified FileNode, SymbolNode, custom IRNodes and IREdges.
     """
     rel_path = os.path.relpath(file_path, repo_path)
     
@@ -146,6 +149,191 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
                 provider_trace=[provider.provider_name]
             ))
             
+        # 4. Extract Calls
+        try:
+            calls_data = provider.extract_calls(tree, query_pack)
+            for idx, call in enumerate(calls_data):
+                callee_name = call["callee"]
+                caller_name = call["caller"]
+                start_line = call["span"]["start"]
+                
+                # Find caller node id if caller_name is given
+                caller_node_id = file_node_id
+                if caller_name:
+                    for n in nodes:
+                        if n.kind == "symbol" and n.symbol == caller_name:
+                            caller_node_id = n.node_id
+                            break
+                else:
+                    # Enclosing symbol heuristic by span
+                    for n in nodes:
+                        if n.kind == "symbol" and n.span["start"] <= start_line <= n.span["end"]:
+                            caller_node_id = n.node_id
+                            break
+                            
+                callee_target_id = f"sym_global_{normalize_node_id(callee_name)}"
+                for n in nodes:
+                    if n.kind == "symbol" and n.symbol == callee_name:
+                        callee_target_id = n.node_id
+                        break
+                        
+                edges.append(CallEdge(
+                    edge_id=f"call_{caller_node_id}_{normalize_node_id(callee_name)}_{start_line}_{idx}",
+                    kind="call",
+                    src_node_id=caller_node_id,
+                    dst_node_id=callee_target_id,
+                    confidence=0.9,
+                    resolution_kind="exact" if callee_target_id != f"sym_global_{normalize_node_id(callee_name)}" else "fuzzy",
+                    provider_trace=[provider.provider_name]
+                ))
+        except Exception:
+            pass
+
+        # 5. Extract TypeHints
+        try:
+            type_hints_data = provider.extract_type_hints(tree, query_pack)
+            for idx, th in enumerate(type_hints_data):
+                th_name = th["symbol"]
+                start = th["span"]["start"]
+                th_node_id = f"hint_{normalize_node_id(rel_path)}_{normalize_node_id(th_name)}_{start}_{idx}"
+                th_node = TypeHint(
+                    node_id=th_node_id,
+                    kind="type_hint",
+                    lang=lang,
+                    file=rel_path,
+                    symbol=th_name,
+                    span=th["span"],
+                    attributes={"is_generated": is_gen, "type_name": th_name}
+                )
+                nodes.append(th_node)
+                edges.append(IREdge(
+                    edge_id=f"contain_{file_node_id}_{th_node_id}",
+                    kind="contain",
+                    src_node_id=file_node_id,
+                    dst_node_id=th_node_id,
+                    confidence=1.0,
+                    resolution_kind="exact",
+                    provider_trace=[provider.provider_name]
+                ))
+        except Exception:
+            pass
+
+        # 6. Extract Resources
+        try:
+            resources_data = provider.extract_resources(tree, query_pack)
+            for idx, res in enumerate(resources_data):
+                res_name = res["symbol"]
+                start = res["span"]["start"]
+                res_node_id = f"res_{normalize_node_id(rel_path)}_{normalize_node_id(res_name)}_{start}_{idx}"
+                res_node = ResourceAccess(
+                    node_id=res_node_id,
+                    kind="resource_access",
+                    lang=lang,
+                    file=rel_path,
+                    symbol=res_name,
+                    span=res["span"],
+                    attributes={"is_generated": is_gen, "resource_kind": res_name}
+                )
+                nodes.append(res_node)
+                edges.append(IREdge(
+                    edge_id=f"contain_{file_node_id}_{res_node_id}",
+                    kind="contain",
+                    src_node_id=file_node_id,
+                    dst_node_id=res_node_id,
+                    confidence=1.0,
+                    resolution_kind="exact",
+                    provider_trace=[provider.provider_name]
+                ))
+        except Exception:
+            pass
+
+        # 7. Extract Guards
+        try:
+            guards_data = provider.extract_guards(tree, query_pack)
+            for idx, gd in enumerate(guards_data):
+                gd_name = gd["symbol"]
+                start = gd["span"]["start"]
+                gd_node_id = f"guard_{normalize_node_id(rel_path)}_{normalize_node_id(gd_name)}_{start}_{idx}"
+                gd_node = GuardCheck(
+                    node_id=gd_node_id,
+                    kind="guard_check",
+                    lang=lang,
+                    file=rel_path,
+                    symbol=gd_name,
+                    span=gd["span"],
+                    attributes={"is_generated": is_gen, "guard_type": gd_name}
+                )
+                nodes.append(gd_node)
+                edges.append(IREdge(
+                    edge_id=f"contain_{file_node_id}_{gd_node_id}",
+                    kind="contain",
+                    src_node_id=file_node_id,
+                    dst_node_id=gd_node_id,
+                    confidence=1.0,
+                    resolution_kind="exact",
+                    provider_trace=[provider.provider_name]
+                ))
+        except Exception:
+            pass
+
+        # 8. Extract States
+        try:
+            states_data = provider.extract_states(tree, query_pack)
+            for idx, st in enumerate(states_data):
+                st_name = st["symbol"]
+                start = st["span"]["start"]
+                st_node_id = f"state_{normalize_node_id(rel_path)}_{normalize_node_id(st_name)}_{start}_{idx}"
+                st_node = StateTransition(
+                    node_id=st_node_id,
+                    kind="state_transition",
+                    lang=lang,
+                    file=rel_path,
+                    symbol=st_name,
+                    span=st["span"],
+                    attributes={"is_generated": is_gen, "state_action": st_name}
+                )
+                nodes.append(st_node)
+                edges.append(IREdge(
+                    edge_id=f"contain_{file_node_id}_{st_node_id}",
+                    kind="contain",
+                    src_node_id=file_node_id,
+                    dst_node_id=st_node_id,
+                    confidence=1.0,
+                    resolution_kind="exact",
+                    provider_trace=[provider.provider_name]
+                ))
+        except Exception:
+            pass
+
+        # 9. Extract Entrypoints
+        try:
+            entrypoints_data = provider.extract_entrypoints(tree, query_pack)
+            for idx, ep in enumerate(entrypoints_data):
+                ep_name = ep["symbol"]
+                start = ep["span"]["start"]
+                ep_node_id = f"entry_{normalize_node_id(rel_path)}_{normalize_node_id(ep_name)}_{start}_{idx}"
+                ep_node = Entrypoint(
+                    node_id=ep_node_id,
+                    kind="entrypoint",
+                    lang=lang,
+                    file=rel_path,
+                    symbol=ep_name,
+                    span=ep["span"],
+                    attributes={"is_generated": is_gen, "entrypoint_type": "web"}
+                )
+                nodes.append(ep_node)
+                edges.append(IREdge(
+                    edge_id=f"contain_{file_node_id}_{ep_node_id}",
+                    kind="contain",
+                    src_node_id=file_node_id,
+                    dst_node_id=ep_node_id,
+                    confidence=1.0,
+                    resolution_kind="exact",
+                    provider_trace=[provider.provider_name]
+                ))
+        except Exception:
+            pass
+
     except Exception as e:
         # If parsing fails, we still keep the FileNode but log/trace the error in attributes
         file_node.attributes["parse_error"] = str(e)

@@ -22,8 +22,7 @@ EXT_TO_LANG = {
     ".php": "php"
 }
 
-# Directories to ignore entirely
-IGNORE_DIRS = {".git", ".audit_workspace_v3", ".gemini"}
+from src_v3.core.boundary import WorkspaceBoundary
 
 # Directory role signatures
 ROLE_SIGNATURES = {
@@ -61,10 +60,12 @@ def scan_repository(repo_path: str, workspace_dir: str = "") -> RepoProfile:
         "Makefile": "make"
     }
 
+    boundary = WorkspaceBoundary(workspace_dir)
+
     # Walk the repository
     for root, dirs, files in os.walk(repo_path):
         abs_root = os.path.abspath(root)
-        if abs_workspace and (abs_root == abs_workspace or abs_root.startswith(abs_workspace + os.sep)):
+        if boundary.is_excluded(abs_root):
             dirs[:] = []
             continue
 
@@ -73,11 +74,7 @@ def scan_repository(repo_path: str, workspace_dir: str = "") -> RepoProfile:
             d_abs_path = os.path.abspath(os.path.join(root, d))
             d_rel_path = os.path.relpath(d_abs_path, repo_path)
             
-            is_workspace = False
-            if abs_workspace and d_abs_path == abs_workspace:
-                is_workspace = True
-            elif os.path.exists(os.path.join(d_abs_path, "audit_plan.json")) or os.path.exists(os.path.join(d_abs_path, "run_manifest.json")):
-                is_workspace = True
+            is_workspace = boundary.is_excluded(d_abs_path) or os.path.exists(os.path.join(d_abs_path, "audit_plan.json")) or os.path.exists(os.path.join(d_abs_path, "run_manifest.json"))
                 
             if is_workspace:
                 directory_roles[d_rel_path] = "workspace_artifact"
@@ -89,7 +86,7 @@ def scan_repository(repo_path: str, workspace_dir: str = "") -> RepoProfile:
                 role = "vendor"
             elif d_lower in {"gen", "generated", "dist", "build", "target", "out", "__pycache__"}:
                 role = "generated"
-            elif "audit_workspace" in d_lower or d in IGNORE_DIRS:
+            elif "audit_workspace" in d_lower or d_lower in WorkspaceBoundary.get_default_exclude_dirs():
                 role = "workspace_artifact"
             elif d_lower in {"test", "tests", "spec", "specs", "__tests__"}:
                 role = "test"
@@ -98,17 +95,12 @@ def scan_repository(repo_path: str, workspace_dir: str = "") -> RepoProfile:
                 directory_roles[d_rel_path] = role
 
         # Modify dirs in-place to avoid walking ignored, hidden, audit workspace, dependency/vendor, and build/generated folders
-        exclude_set = {
-            "node_modules", "venv", ".venv", "env", "vendor", "third_party", "3rdparty",
-            "gen", "generated", "dist", "build", "target", "out", "__pycache__"
-        }
         dirs[:] = [
             d for d in dirs 
-            if d not in IGNORE_DIRS 
-            and not d.startswith(".") 
+            if not d.startswith(".") 
             and "audit_workspace" not in d 
-            and d.lower() not in exclude_set
-            and (not abs_workspace or os.path.abspath(os.path.join(root, d)) != abs_workspace)
+            and d.lower() not in WorkspaceBoundary.get_default_exclude_dirs()
+            and not boundary.is_excluded(os.path.join(root, d))
             and not os.path.exists(os.path.join(root, d, "audit_plan.json"))
             and not os.path.exists(os.path.join(root, d, "run_manifest.json"))
         ]

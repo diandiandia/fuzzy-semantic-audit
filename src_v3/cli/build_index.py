@@ -127,28 +127,12 @@ def main():
             if semantic.provider_name in ["LSPProvider", "LSIFProvider", "CodeGraphProvider"] and semantic.resolution_confidence() == 0.0:
                 # Downgrade to CtagsProvider
                 shard.provider_set["semantic"] = "CtagsProvider"
-                shard.capability = resolve_shard_capability(shard)
                 
                 # Re-instantiate semantic provider as CtagsProvider
                 from src_v3.providers.semantic.ctags_provider import CtagsProvider
                 semantic = CtagsProvider(repo_path, ir_store)
                 degradation_reasons.append(f"Shard {shard.shard_id}: unconfigured LSP/LSIF/CodeGraph provider (confidence=0.0) downgraded to CtagsProvider")
             
-            if semantic.provider_name == "CtagsProvider":
-                semantic_status = "indexed_fallback"
-                has_fallback_semantic = True
-                degradation_reasons.append(f"Shard {shard.shard_id}: using CtagsProvider for semantic analysis")
-            elif semantic.provider_name in ["LSPProvider", "LSIFProvider", "CodeGraphProvider"]:
-                if semantic.resolution_confidence() > 0.5:
-                    semantic_status = "indexed"
-                else:
-                    semantic_status = "indexed_fallback"
-                    has_fallback_semantic = True
-                    degradation_reasons.append(f"Shard {shard.shard_id}: using heuristic simulated {semantic.provider_name} fallback (no live backend connection)")
-            elif semantic.provider_name == "NullProvider":
-                semantic_status = "failed"
-                degradation_reasons.append(f"Shard {shard.shard_id}: semantic provider failed")
-
             # Run semantic enrichment to populate call graph edges in the IR Store before indexing!
             from src_v3.enrich.semantic_orchestrator import enrich_semantic_relations
             enrich_semantic_relations(workspace_dir, repo_path, shard, semantic)
@@ -171,6 +155,22 @@ def main():
             index_file = os.path.join(semantic_dir, "semantic_index.json")
             with open(index_file, 'w', encoding='utf-8') as f:
                 json.dump(semantic_index_data, f, indent=2, ensure_ascii=False)
+
+            # Decide status only after the backend was actually queried. A
+            # connection probe cannot establish semantic capability.
+            if semantic.provider_name == "NullProvider":
+                semantic_status = "failed"
+                degradation_reasons.append(f"Shard {shard.shard_id}: semantic provider failed")
+            elif semantic.provider_name == "CtagsProvider" or getattr(semantic, "use_fallback", True):
+                semantic_status = "indexed_fallback"
+                has_fallback_semantic = True
+                reason = getattr(semantic, "fallback_reason", "")
+                detail = f" ({reason})" if reason else ""
+                degradation_reasons.append(
+                    f"Shard {shard.shard_id}: {semantic.provider_name} semantic fallback{detail}"
+                )
+            else:
+                semantic_status = "indexed"
                 
             index_store.register_index(shard.shard_id, "semantic", semantic_status, semantic_dir)
             

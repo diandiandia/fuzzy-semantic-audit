@@ -2,22 +2,27 @@ const { execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-function runCommand(command, args) {
+function runCommand(command, args, maxRetries = 3) {
     const pythonPath = 'python3';
     const cliPath = path.join(__dirname, '..', 'src_v3', 'cli', `${command}.py`);
     console.error(`Running: ${pythonPath} ${cliPath} ${args.join(' ')}`);
-    try {
-        const output = execFileSync(pythonPath, [cliPath, ...args], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'inherit'] });
+    let lastResult = { ok: false, stage: command, message: 'Stage was not started' };
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            return JSON.parse(output.trim());
-        } catch (e) {
-            console.error(`Failed to parse CLI output for ${command}:`, output);
-            return { ok: false, stage: command, message: `Invalid JSON output: ${output.trim()}` };
+            const output = execFileSync(pythonPath, [cliPath, ...args], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'inherit'] });
+            try {
+                return JSON.parse(output.trim());
+            } catch (e) {
+                lastResult = { ok: false, stage: command, message: `Invalid JSON output: ${output.trim()}` };
+            }
+        } catch (error) {
+            lastResult = { ok: false, stage: command, message: error.message };
         }
-    } catch (error) {
-        console.error(`Error executing ${command}:`, error.message);
-        return { ok: false, stage: command, message: error.message };
+        if (attempt < maxRetries) {
+            console.error(`${command} failed on attempt ${attempt}/${maxRetries}; retrying`);
+        }
     }
+    return lastResult;
 }
 
 function main() {

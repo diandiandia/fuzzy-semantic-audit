@@ -35,12 +35,15 @@ def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
 def query_llm(prompt: str, config: Dict[str, Any]) -> str:
     """
     Directly queries LLM API (Gemini or OpenAI) using standard library urllib.
+    Supports configurable models and custom endpoints from config.
     """
     gemini_key = os.environ.get("GEMINI_API_KEY") or config.get("gemini_api_key")
     openai_key = os.environ.get("OPENAI_API_KEY") or config.get("openai_api_key")
     
     if gemini_key:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+        api_base = config.get("gemini_api_base", "https://generativelanguage.googleapis.com/v1beta/models")
+        model = config.get("gemini_model", "gemini-1.5-flash")
+        url = f"{api_base.rstrip('/')}/{model}:generateContent?key={gemini_key}"
         data = {
             "contents": [{"parts": [{"text": prompt}]}]
         }
@@ -55,9 +58,11 @@ def query_llm(prompt: str, config: Dict[str, Any]) -> str:
             return res["candidates"][0]["content"]["parts"][0]["text"]
             
     elif openai_key:
-        url = "https://api.openai.com/v1/chat/completions"
+        api_base = config.get("openai_api_base", "https://api.openai.com/v1")
+        model = config.get("openai_model", "gpt-4o-mini")
+        url = f"{api_base.rstrip('/')}/chat/completions"
         data = {
-            "model": "gpt-4o-mini",
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"}
         }
@@ -139,6 +144,6 @@ def run_three_lens_referee(
                 votes[vote_key] = "MAYBE"
         except Exception as e:
             warnings.append(f"Lens '{vote_key}' failed: {str(e)}")
-            votes[vote_key] = "MAYBE"
-            
+            votes[vote_key] = "ERROR"
+            votes["error"] = True
     return votes, warnings

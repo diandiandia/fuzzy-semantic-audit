@@ -241,6 +241,35 @@ class LSIFProvider(SemanticProvider):
         return refs
 
     def find_callers(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
+        # If we have LSIF parsed data, find callers by looking up LSIF references and locating enclosing function in IR
+        if not self.use_fallback:
+            refs = self.find_references(symbol_ref)
+            if refs and self.ir_store:
+                callers = []
+                visited = set()
+                for ref in refs:
+                    file_symbols = self.ir_store.get_symbols_by_file(ref["file"])
+                    ref_line = ref["span"]["start"]
+                    enclosing = None
+                    for fs in file_symbols:
+                        if fs.attributes.get("symbol_kind") == "function":
+                            if fs.span["start"] <= ref_line <= fs.span["end"]:
+                                if not enclosing or (fs.span["end"] - fs.span["start"] < enclosing.span["end"] - enclosing.span["start"]):
+                                    enclosing = fs
+                    if enclosing:
+                        caller_key = f"{enclosing.file}:{enclosing.symbol}:{enclosing.span['start']}"
+                        if caller_key not in visited:
+                            visited.add(caller_key)
+                            callers.append({
+                                "symbol": enclosing.symbol,
+                                "file": enclosing.file,
+                                "span": enclosing.span,
+                                "kind": "function"
+                            })
+                if callers:
+                    return callers
+
+        # Fallback Mode
         if not self.ir_store:
             return []
         sym_name = symbol_ref.get("symbol")
@@ -293,6 +322,41 @@ class LSIFProvider(SemanticProvider):
         return callers
 
     def find_callees(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
+        # If we have LSIF data, find callees by scanning within range and looking up definitions
+        if not self.use_fallback and self.ir_store:
+            r_id = self._find_matching_range_id(symbol_ref)
+            if r_id and r_id in self.ranges:
+                func_range = self.ranges[r_id]
+                func_file = func_range.get("document")
+                func_start = func_range["start"]["line"] + 1
+                func_end = func_range["end"]["line"] + 1
+                
+                callees = []
+                visited = set()
+                # Find all sub-ranges in the same file that are within the function body
+                for sub_id, sub_range in self.ranges.items():
+                    if sub_id != r_id and sub_range.get("document") == func_file:
+                        sub_line = sub_range["start"]["line"] + 1
+                        if func_start <= sub_line <= func_end:
+                            # Check if this sub-range has a definition
+                            if sub_id in self.definitions:
+                                for df in self.definitions[sub_id]:
+                                    # Find matching symbol node
+                                    for sn in self.ir_store.iter_symbol_nodes():
+                                        if sn.file == df["file"] and sn.span["start"] <= df["span"]["start"] <= sn.span["end"]:
+                                            callee_key = f"{sn.file}:{sn.symbol}:{sn.span['start']}"
+                                            if callee_key not in visited:
+                                                visited.add(callee_key)
+                                                callees.append({
+                                                    "symbol": sn.symbol,
+                                                    "file": sn.file,
+                                                    "span": sn.span,
+                                                    "kind": sn.attributes.get("symbol_kind", "symbol")
+                                                })
+                if callees:
+                    return callees
+
+        # Fallback Mode
         if not self.ir_store:
             return []
         sym_name = symbol_ref.get("symbol")

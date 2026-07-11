@@ -153,7 +153,37 @@ def main():
             manual_review_list = queue_store.load_manual_review()
             deferred_list = queue_store.load_deferred()
             
+            from concurrent.futures import ThreadPoolExecutor
             from src_v3.verify.llm_triage import run_three_lens_referee
+
+            # Pre-fetch LLM votes concurrently for all candidates with default votes
+            candidates_to_query = []
+            for item in batch_data:
+                cand_dict = item["candidate"]
+                cand = CandidateRecord.from_dict(cand_dict)
+                existing_cand = candidate_store.get_candidate_by_id(cand.candidate_id, pruned=True)
+                if existing_cand and existing_cand.status in ["verified", "false_positive", "needs_review", "deferred", "error"]:
+                    continue
+                votes = item.get("votes", {})
+                if votes.get("reachability") == "MAYBE" and votes.get("guarded") == "MAYBE":
+                    bundle = evidence_store.get_evidence(cand.candidate_id)
+                    if bundle:
+                        candidates_to_query.append((cand, bundle, item))
+
+            def run_triage_worker(cand_bundle_item):
+                cand, bundle, item = cand_bundle_item
+                try:
+                    llm_votes, warnings = run_three_lens_referee(cand, bundle, config)
+                    return cand.candidate_id, llm_votes, warnings
+                except Exception as e:
+                    return cand.candidate_id, {"reachability": "ERROR", "guarded": "ERROR", "exploitability": "ERROR", "error": True}, [str(e)]
+
+            prefetched_votes = {}
+            if candidates_to_query:
+                max_workers = min(10, len(candidates_to_query))
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    for cid, llm_votes, warnings in executor.map(run_triage_worker, candidates_to_query):
+                        prefetched_votes[cid] = (llm_votes, warnings)
 
             for item in batch_data:
                 cand_dict = item["candidate"]
@@ -207,22 +237,17 @@ def main():
                 
                 # Check if votes are default/unfilled
                 if votes.get("reachability") == "MAYBE" and votes.get("guarded") == "MAYBE":
-                    # Try calling LLM first
-                    bundle = evidence_store.get_evidence(cand.candidate_id)
-                    if bundle:
-                        llm_votes, warnings = run_three_lens_referee(cand, bundle, config)
+                    if cand.candidate_id in prefetched_votes:
+                        llm_votes, warnings = prefetched_votes[cand.candidate_id]
                         if warnings:
                             # Log warning about LLM degradation
                             log_event(workspace_dir, "verify_batch", "warning", f"LLM triage degraded for candidate {cand.candidate_id}: {', '.join(warnings)}")
                             if "LLM Triage degraded: api keys missing or query failed" not in plan.run_manifest.degradation_reasons:
                                 plan.run_manifest.degradation_reasons.append("LLM Triage degraded: api keys missing or query failed")
                                 
-                        # Use LLM votes if they successfully returned non-default values
-                        if llm_votes.get("reachability") != "MAYBE" or llm_votes.get("guarded") != "MAYBE":
-                            votes = llm_votes
-                            
-                    # If still unfilled (failed LLM or keys missing), votes remain MAYBE, defaulting to needs_review
-                    pass
+                        # Use LLM votes
+                        votes = llm_votes
+
                             
                 from src_v3.core.state_machine import transition
                 # Transition candidate from queued_for_verify to verifying

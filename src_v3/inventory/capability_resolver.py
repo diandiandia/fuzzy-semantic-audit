@@ -11,7 +11,6 @@ def resolve_shard_capability(shard: LanguageShard) -> str:
     providers = shard.provider_set or {}
     parser_provider = providers.get("parser")
     semantic_provider = providers.get("semantic")
-    framework_provider = providers.get("framework")
     
     # No parser -> L0
     if not parser_provider or parser_provider == "NullProvider":
@@ -21,12 +20,8 @@ def resolve_shard_capability(shard: LanguageShard) -> str:
     if not semantic_provider or semantic_provider == "NullProvider":
         return CapabilityLevel.L1.value
         
-    # If framework provider is active with strong semantic provider -> L3, else L2
-    if framework_provider and framework_provider != "GenericFrameworkProvider":
-        if semantic_provider in ["LSPProvider", "LSIFProvider", "CodeGraphProvider"]:
-            return CapabilityLevel.L3.value
-        return CapabilityLevel.L2.value
-        
+    # Nominal capability is at most L2. L3 represents deep call-graph path verification
+    # which can only be achieved effectively if confirmed by the actual execution environment.
     return CapabilityLevel.L2.value
 
 def resolve_effective_capability(shard: LanguageShard, ir_store: IRStore, semantic_index: Dict[str, Any], semantic_provider: Any = None) -> str:
@@ -53,7 +48,11 @@ def resolve_effective_capability(shard: LanguageShard, ir_store: IRStore, semant
         
     effective_cap = CapabilityLevel.L1.value
     
-    # 2. L2 Semantic: Must have successfully resolved definitions/references in the semantic index
+    # 2. L2 Semantic: heuristic/text fallback results are never semantic evidence.
+    if semantic_provider is None or getattr(semantic_provider, "use_fallback", True):
+        return effective_cap
+
+    # Must have successfully resolved definitions/references in the semantic index.
     has_semantic = False
     if semantic_index:
         for node_id, data in semantic_index.items():
@@ -64,11 +63,19 @@ def resolve_effective_capability(shard: LanguageShard, ir_store: IRStore, semant
     if has_semantic:
         effective_cap = CapabilityLevel.L2.value
         
-    # 3. L3 Deep Audit: Must have call graph edges or framework entrypoints successfully resolved,
-    # AND the semantic provider must be a true, high-confidence semantic analyzer (not a fallback/simulated provider).
+    # 3. L3 Deep Audit: Require real, exact semantic call edges in addition to
+    # non-fallback definition/reference results. Parser-created fuzzy call edges
+    # and text-derived provider output are insufficient.
     has_deep = False
     all_edges = ir_store.get_edges()
-    call_edges = [e for e in all_edges if e.kind == "call" and ir_store.get_node_by_id(e.src_node_id) and ir_store.get_node_by_id(e.src_node_id).file in shard_paths_set]
+    call_edges = [
+        e for e in all_edges
+        if e.kind == "call"
+        and e.resolution_kind == "exact"
+        and getattr(semantic_provider, "provider_name", "") in e.provider_trace
+        and ir_store.get_node_by_id(e.src_node_id)
+        and ir_store.get_node_by_id(e.src_node_id).file in shard_paths_set
+    ]
     if call_edges:
         has_deep = True
         
@@ -76,22 +83,7 @@ def resolve_effective_capability(shard: LanguageShard, ir_store: IRStore, semant
     if entrypoint_nodes:
         has_deep = True
         
-    sem_prov_name = shard.provider_set.get("semantic", "NullProvider")
-    
-    # Determine if semantic provider is in fallback mode
-    is_fallback_sem = True
-    if sem_prov_name not in ["CtagsProvider", "NullProvider"]:
-        if semantic_provider is not None:
-            # If it has non-zero resolution confidence (e.g. > 0.5 because mock/simulated provider got endpoint configured), it's not a fallback
-            if semantic_provider.resolution_confidence() > 0.5:
-                is_fallback_sem = False
-        else:
-            # Default to True for safety if not passed
-            pass
-            
-    if has_deep and not is_fallback_sem:
+    if has_deep:
         effective_cap = CapabilityLevel.L3.value
-    elif effective_cap == CapabilityLevel.L3.value:
-        effective_cap = CapabilityLevel.L2.value
             
     return effective_cap

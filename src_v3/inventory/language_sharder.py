@@ -3,13 +3,16 @@ from typing import List, Dict, Set
 from src_v3.core.models import LanguageShard, RepoProfile
 from src_v3.inventory.repo_profiler import EXT_TO_LANG
 
+from src_v3.core.boundary import WorkspaceBoundary
+
 def shard_repository(repo_path: str, profile: RepoProfile, workspace_dir: str = "") -> List[LanguageShard]:
     """
     Shards the repository by grouping files by their language and top-level directory.
     """
     repo_path = os.path.abspath(repo_path)
-    abs_workspace = os.path.abspath(workspace_dir) if workspace_dir else ""
     shards: List[LanguageShard] = []
+    
+    boundary = WorkspaceBoundary(workspace_dir)
     
     # Group file relative paths by (lang, top_level_dir)
     lang_dir_files: Dict[str, Dict[str, List[str]]] = {}
@@ -19,21 +22,17 @@ def shard_repository(repo_path: str, profile: RepoProfile, workspace_dir: str = 
     
     for root, dirs, files in os.walk(repo_path):
         abs_root = os.path.abspath(root)
-        if abs_workspace and (abs_root == abs_workspace or abs_root.startswith(abs_workspace + os.sep)):
+        if boundary.is_excluded(abs_root):
             dirs[:] = []
             continue
 
         # Modify dirs in-place to avoid hidden, audit workspace, dependency/vendor, and build/generated folders
-        exclude_set = {
-            "node_modules", "venv", ".venv", "env", "vendor", "third_party", "3rdparty",
-            "gen", "generated", "dist", "build", "target", "out", "__pycache__"
-        }
         dirs[:] = [
             d for d in dirs 
             if not d.startswith(".") 
             and "audit_workspace" not in d 
-            and d.lower() not in exclude_set
-            and (not abs_workspace or os.path.abspath(os.path.join(root, d)) != abs_workspace)
+            and d.lower() not in WorkspaceBoundary.get_default_exclude_dirs()
+            and not boundary.is_excluded(os.path.join(root, d))
             and not os.path.exists(os.path.join(root, d, "audit_plan.json"))
             and not os.path.exists(os.path.join(root, d, "run_manifest.json"))
         ]

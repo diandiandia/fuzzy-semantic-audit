@@ -1,6 +1,8 @@
 import os
 import re
 import urllib.request
+import urllib.parse
+import json
 from typing import List, Dict, Any, Optional
 from src_v3.providers.semantic.base import SemanticProvider
 from src_v3.core.enums import CapabilityLevel
@@ -14,6 +16,7 @@ class CodeGraphProvider(SemanticProvider):
         self.repo_path = os.path.abspath(repo_path) if repo_path else ""
         self.ir_store = ir_store
         self.use_fallback = not bool(endpoint)
+        self.fallback_reason = "CodeGraph endpoint is not configured" if self.use_fallback else ""
         
         # Test endpoint connectivity if provided
         if endpoint:
@@ -23,20 +26,48 @@ class CodeGraphProvider(SemanticProvider):
                     self.use_fallback = False
             except Exception:
                 self.use_fallback = True
+                self.fallback_reason = "CodeGraph endpoint is unreachable"
 
     def capability_level(self) -> str:
         if self.use_fallback:
-            return CapabilityLevel.L2.value
+            return CapabilityLevel.L1.value
         return CapabilityLevel.L3.value
 
     def resolution_confidence(self) -> float:
         if self.use_fallback:
             return 0.0
-        return 0.8
+        return 0.9
+
+    def _query_api(self, path: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not self.endpoint:
+            return []
+        try:
+            query_string = urllib.parse.urlencode(params)
+            url = f"{self.endpoint.rstrip('/')}/{path}?{query_string}"
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=2.0) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                if isinstance(data, list):
+                    return data
+                return data.get("results", [])
+        except Exception as exc:
+            # A reachable HTTP endpoint is not proof that it implements the
+            # CodeGraph query contract. Do not silently retain semantic status.
+            self.use_fallback = True
+            self.fallback_reason = f"CodeGraph query '{path}' failed: {exc}"
+            return []
 
     def find_definitions(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
-        # In a real integration, we would perform an HTTP/GraphQL request to the CodeGraph endpoint.
-        # Since this is a fallback capability contract, if active we can use IR symbols as definitions.
+        if not self.use_fallback:
+            res = self._query_api("definitions", {
+                "symbol": symbol_ref.get("symbol", ""),
+                "file": symbol_ref.get("file", ""),
+                "line": symbol_ref.get("span", {}).get("start", 1)
+            })
+            if res:
+                return res
+
+        # Fallback Mode
         if not self.ir_store:
             return []
         sym_name = symbol_ref.get("symbol")
@@ -55,6 +86,16 @@ class CodeGraphProvider(SemanticProvider):
         return defs
 
     def find_references(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not self.use_fallback:
+            res = self._query_api("references", {
+                "symbol": symbol_ref.get("symbol", ""),
+                "file": symbol_ref.get("file", ""),
+                "line": symbol_ref.get("span", {}).get("start", 1)
+            })
+            if res:
+                return res
+
+        # Fallback Mode
         if not self.ir_store or not self.repo_path:
             return []
         sym_name = symbol_ref.get("symbol")
@@ -90,6 +131,16 @@ class CodeGraphProvider(SemanticProvider):
         return refs
 
     def find_callers(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not self.use_fallback:
+            res = self._query_api("callers", {
+                "symbol": symbol_ref.get("symbol", ""),
+                "file": symbol_ref.get("file", ""),
+                "line": symbol_ref.get("span", {}).get("start", 1)
+            })
+            if res:
+                return res
+
+        # Fallback Mode
         if not self.ir_store:
             return []
         sym_name = symbol_ref.get("symbol")
@@ -142,6 +193,16 @@ class CodeGraphProvider(SemanticProvider):
         return callers
 
     def find_callees(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not self.use_fallback:
+            res = self._query_api("callees", {
+                "symbol": symbol_ref.get("symbol", ""),
+                "file": symbol_ref.get("file", ""),
+                "line": symbol_ref.get("span", {}).get("start", 1)
+            })
+            if res:
+                return res
+
+        # Fallback Mode
         if not self.ir_store:
             return []
         sym_name = symbol_ref.get("symbol")

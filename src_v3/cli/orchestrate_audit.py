@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import subprocess
+import time
 
 
 def run_stage(stage_name: str, args: list) -> dict:
@@ -36,6 +37,25 @@ def run_stage(stage_name: str, args: list) -> dict:
             "message": f"Failed to run stage process: {str(e)}"
         }
 
+def run_stage_with_retry(stage_name: str, args: List[str], max_retries: int = 3) -> Dict[str, Any]:
+    """
+    Runs a CLI stage with retries and a backoff sleep on failure.
+    """
+    for attempt in range(1, max_retries + 1):
+        res = run_stage(stage_name, args)
+        if res.get("ok"):
+            return res
+        
+        # Log retry warning
+        retry_msg = {
+            "ok": False,
+            "stage": stage_name,
+            "message": f"Stage {stage_name} failed on attempt {attempt}/{max_retries}. Retrying... Error details: {res.get('message')}"
+        }
+        print(json.dumps(retry_msg, ensure_ascii=False))
+        time.sleep(1.0)
+    return res
+
 def main():
     parser = argparse.ArgumentParser(description="Python E2E orchestrator for Fuzzy Semantic Audit V3")
     parser.add_argument("--project", required=True, help="Path to the repository to audit")
@@ -55,7 +75,7 @@ def main():
     if args.workspace:
         init_args += ["--workspace", os.path.abspath(args.workspace)]
     
-    res = run_stage("init_plan", init_args)
+    res = run_stage_with_retry("init_plan", init_args)
     if not res.get("ok"):
         print(json.dumps(res, ensure_ascii=False))
         sys.exit(1)
@@ -74,27 +94,27 @@ def main():
     ]
     
     for stage in core_stages:
-        res = run_stage(stage, ["--workspace", workspace_dir])
+        res = run_stage_with_retry(stage, ["--workspace", workspace_dir])
         if not res.get("ok"):
             print(json.dumps(res, ensure_ascii=False))
             sys.exit(1)
         print(json.dumps(res, ensure_ascii=False))
         
     # Phase 8: LLM Triage (verify_batch get-batch and writeback)
-    res = run_stage("verify_batch", ["--workspace", workspace_dir, "--get-batch"])
+    res = run_stage_with_retry("verify_batch", ["--workspace", workspace_dir, "--get-batch"])
     if not res.get("ok"):
         print(json.dumps(res, ensure_ascii=False))
         sys.exit(1)
     print(json.dumps(res, ensure_ascii=False))
     
-    res = run_stage("verify_batch", ["--workspace", workspace_dir, "--writeback"])
+    res = run_stage_with_retry("verify_batch", ["--workspace", workspace_dir, "--writeback"])
     if not res.get("ok"):
         print(json.dumps(res, ensure_ascii=False))
         sys.exit(1)
     print(json.dumps(res, ensure_ascii=False))
     
     # 3. Final Stage: Compile Reports
-    res = run_stage("compile_reports", ["--workspace", workspace_dir])
+    res = run_stage_with_retry("compile_reports", ["--workspace", workspace_dir])
     if not res.get("ok"):
         print(json.dumps(res, ensure_ascii=False))
         sys.exit(1)

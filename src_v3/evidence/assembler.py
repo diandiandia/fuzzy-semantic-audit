@@ -48,6 +48,13 @@ def assemble_evidence(
         
     symbol_body = get_node_source(repo_path, sn)
     
+    # Load BFS depth limits from track configuration
+    from src_v3.packs.tracks import load_track_pack
+    track = candidate.source_tracks[0] if candidate.source_tracks else "generic"
+    track_pack = load_track_pack(track)
+    max_bfs_depth_up = track_pack.get("evidence_bfs_depth_up", 5)
+    max_bfs_depth_down = track_pack.get("evidence_bfs_depth_down", 3)
+    
     # Traverse graph for call chains, entrypoints, resources, guards
     edges = ir_store.get_edges()
     
@@ -117,7 +124,7 @@ def assemble_evidence(
     
     while queue:
         curr_id, depth = queue.pop(0)
-        if depth >= 3:
+        if depth >= max_bfs_depth_up:
             continue
             
         curr_node = ir_store.get_node_by_id(curr_id)
@@ -162,7 +169,7 @@ def assemble_evidence(
     visited_down = {sn.node_id}
     while queue_down:
         curr_id, depth = queue_down.pop(0)
-        if depth >= 2: # Limit depth down
+        if depth >= max_bfs_depth_down:
             continue
             
         curr_node = ir_store.get_node_by_id(curr_id)
@@ -182,6 +189,18 @@ def assemble_evidence(
                 visited_down.add(c_id)
                 queue_down.append((c_id, depth + 1))
                 
+    # Extract real type and class definitions in the same file for type_or_model_context
+    type_or_model_context = []
+    for node in ir_store.get_symbol_nodes():
+        if node.file == candidate.file:
+            if node.kind == "type_hint" or (node.kind == "symbol" and node.attributes.get("symbol_kind") == "class"):
+                type_or_model_context.append({
+                    "symbol": node.symbol,
+                    "kind": node.kind if node.kind != "symbol" else "class",
+                    "span": node.span,
+                    "code": get_node_source(repo_path, node)
+                })
+                
     bundle_dict = {
         "candidate_id": candidate.candidate_id,
         "symbol_body": symbol_body,
@@ -191,7 +210,7 @@ def assemble_evidence(
         "guard_snippets": guard_snippets,
         "resource_snippets": resource_snippets,
         "state_transition_snippets": state_transition_snippets,
-        "type_or_model_context": [],
+        "type_or_model_context": type_or_model_context,
         "provider_trace": candidate.provider_trace
     }
     
@@ -207,7 +226,7 @@ def assemble_evidence(
         guard_snippets=guard_snippets,
         resource_snippets=resource_snippets,
         state_transition_snippets=state_transition_snippets,
-        type_or_model_context=[],
+        type_or_model_context=type_or_model_context,
         provider_trace=candidate.provider_trace,
         evidence_completeness_score=score,
         evidence_gaps=gaps

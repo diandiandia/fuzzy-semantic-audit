@@ -39,11 +39,14 @@ def recall_by_vector(
     if not os.path.exists(index_dir):
         return []
         
-    query = TRACK_INTENTS.get(track, track)
+    from src_v3.packs.tracks import load_track_pack
+    track_pack = load_track_pack(track)
+    query = track_pack.get("vector_intent") or TRACK_INTENTS.get(track, track)
+    top_k = track_pack.get("top_k", 10)
     
     # 2. Query the index
     try:
-        search_results = embedding_provider.search(query, index_dir, top_k=10)
+        search_results = embedding_provider.search(query, index_dir, top_k=top_k)
     except Exception:
         return []
         

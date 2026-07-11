@@ -29,17 +29,33 @@ def load_track_pack(track: str) -> Dict[str, Any]:
             
     rules_path = os.path.join(track_dir, "rules.yaml")
     rules = []
+    vector_intent = ""
+    top_k = 10
+    graph_recall_max_hops = 3
+    evidence_bfs_depth_up = 5
+    evidence_bfs_depth_down = 3
+    
     if os.path.exists(rules_path):
         try:
             with open(rules_path, 'r', encoding='utf-8') as f:
                 data = yaml.safe_load(f)
                 rules = data.get("rules", [])
+                vector_intent = data.get("vector_intent", "")
+                top_k = data.get("top_k", 10)
+                graph_recall_max_hops = data.get("graph_recall_max_hops", 3)
+                evidence_bfs_depth_up = data.get("evidence_bfs_depth_up", 5)
+                evidence_bfs_depth_down = data.get("evidence_bfs_depth_down", 3)
         except Exception:
             pass
             
     return {
         "version": version,
-        "rules": rules
+        "rules": rules,
+        "vector_intent": vector_intent,
+        "top_k": top_k,
+        "graph_recall_max_hops": graph_recall_max_hops,
+        "evidence_bfs_depth_up": evidence_bfs_depth_up,
+        "evidence_bfs_depth_down": evidence_bfs_depth_down
     }
 
 # Populate legacy AUDIT_TRACKS for backward compatibility

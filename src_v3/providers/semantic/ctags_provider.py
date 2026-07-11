@@ -13,7 +13,9 @@ class CtagsProvider(SemanticProvider):
         self.ir_store = ir_store
 
     def capability_level(self) -> str:
-        return CapabilityLevel.L2
+        # Ctags-style name and text matching is structural assistance, not semantic
+        # reference resolution.  Callers must report it as an explicit fallback.
+        return CapabilityLevel.L1.value
 
     def resolution_confidence(self) -> float:
         return 0.5 # Moderate confidence (heuristic based)

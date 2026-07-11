@@ -37,25 +37,23 @@
 
 | 阶段 | 状态 | 说明 |
 | --- | --- | --- |
-| P0 基础骨架 | `partial` | 主体文件已存在,但目录与文档仍未完全对齐,且部分状态/契约仍偏松。 |
-| P1 Inventory / Parse | `partial` | 主链路可运行,但 repo/workspace 边界、ignore 规则、effective capability 判定未达标。 |
-| P2 Provider / Index | `partial` | provider 框架已搭起,但多个 provider 仍是占位或启发式近似实现。 |
-| P3 Framework / Recall / Candidate | `partial` | recall 流程存在,但 packs 缺失、framework coverage 不完整、召回质量仍偏启发式。 |
-| P4 Prune / Evidence / Verify | `partial` | 有可运行流程,但仍是简化版本,离 full V3 的证据与裁判机制有差距。 |
-| P5 Report / Workflow / E2E | `partial` | workflow/report/test 已有基础,但尚未形成完整回归、性能、黄金样例交付。 |
+| P0 基础骨架 | `done` | 主体文件、模型、状态与存储契约可用。 |
+| P1 Inventory / Parse | `partial` | workspace 边界与 IR 基础可用，但多语言解析和弱解析质量仍不等同于 full implementation。 |
+| P2 Provider / Index | `partial` | LSP 已执行真实协议握手，LSIF/CodeGraph 有后端路径；仍缺少真实服务和 LSIF 样本的兼容性矩阵。 |
+| P3 Framework / Recall / Candidate | `partial` | pack 与多路召回可用，但语言/框架覆盖和语义精度仍需扩展。 |
+| P4 Prune / Evidence / Verify | `partial` | 类型上下文、BFS 和并发 triage 可用；参数传播与裁判质量仍为近似实现。 |
+| P5 Report / Workflow / E2E | `partial` | workflow 已支持重试，回归覆盖了完整二次运行；尚无真实仓库黄金集和 index reuse 基准。 |
 
 截至 `2026-07-11` 按任务 DoD 重新校准:
 
-- 已 100% 完成开发: `T04`、`T05`、`T06`、`T08`、`T10`、`T13`、`T14`、`T15`、`T16`、`T17`、`T18`、`T19`、`T22`、`T28`、`T29`、`T33`、`T35`、`T36`、`T40`、`T42`、`T43`、`T44`、`T46`、`T47`
-- 尚未 100% 完成开发: `T01-T03`、`T07`、`T09`、`T11-T12`、`T20-T21`、`T23-T27`、`T30-T32`、`T34`、`T37-T39`、`T41`、`T45`、`T48-T72`
+- 已 100% 完成开发: `T01-T08`、`T10`、`T13`、`T16-T19`、`T22-T24`、`T28-T29`、`T33`、`T40`、`T47`、`T53`、`T55`、`T58-T60`、`T62-T66`、`T69-T70`
+- 尚未 100% 完成开发: `T09`、`T11-T12`、`T14-T15`、`T20-T21`、`T25-T27`、`T30-T32`、`T34-T39`、`T41-T46`、`T48-T52`、`T54`、`T56-T57`、`T61`、`T67-T68`、`T71-T72`
 
 当前优先级最高的缺口:
+1. 为 LSP、LSIF、CodeGraph 建立真实后端/格式兼容性测试矩阵，而非仅 mock 协议测试。
+2. 建立固定真实仓库的黄金样例，覆盖 candidate total、fallback ratio、precision@N、compression ratio。
+3. 实现并验证 index reuse；当前只验证 IR cache 命中。
 
-1. 修正 `repo_path` / `workspace_dir` 边界,禁止把 workspace 或历史产物重新扫入源码面。
-2. 修正 effective capability 判定,禁止把 regex/text fallback 伪装成 `L1/L2/L3`。
-3. 将 `LSP/LSIF/CodeGraph` 等 provider 从“启发式近似实现”升级为“真实后端集成 + 明确 fallback 契约”。
-4. 将 `packs/semantic`、`packs/frameworks`、`packs/tracks` 从 registry 常量升级为可版本化规则/查询/策略包。
-5. 完成回归样例、黄金基线、性能验证,并按 full implementation 标准重验 P0-P5 DoD。
 
 ---
 
@@ -168,58 +166,59 @@
 
 ### P1 当前判断
 
-- T09 `done`: repo profiler 可完美识别排除 workspace 目录与历史审计产物。
+- T09 `partial`: workspace/历史产物边界可用，但目录角色识别仍是启发式规则。
 - T10 `done`: framework detector 已返回框架列表与置信度,且失败时保持 graceful fallback。
-- T11 `done`: language sharder 已排除历史工作区且实现完全幂等的排序分片。
-- T12 `done`: capability resolver 有效能力级别解析契约已达标。
+- T11 `partial`: 已排除工作区和常见产物，但分片/忽略策略尚未覆盖完整仓库边界。
+- T12 `partial`: 已禁止 fallback 结果升级为 L2/L3，仍缺真实后端结果质量统计。
 - T13 `done`: parser provider base 已建立。
-- T14 `done`: native provider 已满足“至少一门语言解析 + 返回 parser tree + 暴露 fallback mode”的 DoD。
-- T15 `done`: WASM provider 已具备独立 parse mode、版本标记与 native 一致接口。
+- T14 `partial`: Python AST 与 Tree-sitter 路径可用，多语言解析覆盖仍有限。
+- T15 `partial`: WASM 接口存在，但尚未形成独立可验证解析后端。
 - T16 `done`: query loader 已支持按语言加载 `.scm` 与返回版本。
 - T17 `done`: IR builder 已稳定产出 `FileNode` / `SymbolNode` / `ImportEdge` 与基础属性。
 - T18 `done`: IR cache 基础可用。
 - T19 `done`: IR store 已支持 nodes/edges 持久化与按 file/symbol/kind/source/destination 查询。
-- T20 `done`: inventory CLI 边界约束已充分测试覆盖。
-- T21 `done`: build_ir CLI 错误/降级透明度已达标，自动写入 degradation_reasons。
+- T20 `partial`: 边界主路径可用，缺少复杂历史产物仓库的测试。
+- T21 `partial`: 能写入降级原因，尚缺多语言错误/降级覆盖。
 
 ### P2 当前判断
 
 - T22 `done`: semantic provider base 已满足统一接口与 capability/confidence 契约。
 - T23 `done`: NullProvider 返回 CapabilityLevel.L0.value 满足最简契约。
 - T24 `done`: CtagsProvider 能够正确运行并暴露 Mode 2 Heuristic 模式。
-- T25-T27 `done`: LSPProvider/LSIFProvider/CodeGraphProvider 已满足真实后端连通性检查与明确 fallback 语义。
+- T25-T27 `partial`: LSP 已有协议握手与查询，LSIF/CodeGraph 有后端路径和运行时降级；缺真实后端兼容性矩阵。
 - T28 `done`: embedding provider base 已建立。
 - T29 `done`: `KeywordFallbackProvider` 已满足 lexical fallback DoD。
-- T30-T31 `done`: 实现了 OpenAI、Gemini、Cohere 与 FastEmbed 向量 Provider 的真实接口适配。
-- T32 `done`: provider registry 根据环境自动选择 provider 且能输出清晰的降级原因。
+- T30-T31 `partial`: 接口适配存在，缺真实服务回归验证。
+- T32 `partial`: provider registry 可选择并降级，缺组合策略覆盖。
 - T33 `done`: index store 已支持 `indexed/indexed_fallback` 记录与按 shard 查询。
-- T34 `done`: build_index CLI 已完美对齐 run_capability 与 degradation_reasons 设计。
+- T34 `partial`: fallback 状态和 effective capability 已收紧，缺 index reuse 与真实后端矩阵。
 
 ### P3 当前判断
 
 - T35-T36 `done`: framework base 与 generic provider 已存在。
-- T37 `done`: 各框架包已建立，版本化且覆盖完整类别。
-- T38-T39 `done`: enrich 逻辑与 concrete IRNode 子类实例化均已通过单元测试覆盖。
+- T37 `partial`: 首批框架包可用，覆盖面未达到完整类别。
+- T38-T39 `partial`: enrich 基础可用，框架语义仍以规则/启发式为主。
 - T40 `done`: recall normalizer 已满足 `identity_key` 去重与多来源合并 DoD。
-- T41 `done`: rule recall 规则路径已完全解耦，从 tracks 包规则文件中加载。
-- T42 `done`: vector recall 已支持 lexical fallback 且 trace 可见。
-- T43 `done`: graph recall 已支持 exact/fuzzy edge 参与并做 shard/file 过滤。
-- T44 `done`: resource recall 已限制到相关 tracks。
-- T45 `done`: framework recall 完美将包含详细触发的 framework_trace 字段注入到 provider_trace 中。
-- T46 `done`: recall orchestrator 已统一调度通道、记录零召回组合与通道统计。
+- T41-T46 `partial`: 多路召回与 trace 可用，质量仍依赖不完整语义图和启发式规则。
 - T47 `done`: candidate store 基础可用。
-- T48 `done`: recall CLI 达到了高标准的召回质量。
+- T48 `partial`: CLI 可运行，尚无真实仓库召回质量基线。
 
 ### P4 当前判断
 
-- T49-T52 `done`: prune 打分权重依据不同审计 track 进行动态适配，已完美交付。
-- T53-T56 `done`: evidence assembler 实现了 gaps 探测并构造了标准 package。
-- T57-T61 `done`: verify batch 具备完整三裁判能力决策，并实现中断恢复防重机制。
+- T49-T52 `partial`: track 权重和静态剪枝可用，仍缺精度评估。
+- T53 `done`: evidence completeness/gaps 基础可用。
+- T54-T56 `partial`: 类型上下文和 BFS 已增强，参数传播等深层证据仍是近似实现。
+- T57 `partial`: severity filter 可用，缺真实风险样例标定。
+- T58-T60 `done`: prompt、verdict 和 writeback 基础契约可用。
+- T61 `partial`: 并发 triage 与恢复可用，外部 LLM 失败策略仍需真实服务验证。
 
 ### P5 当前判断
 
-- T62-T68 `done`: reports 生成高级美观的 Summary Table 与 alert 卡片，verify queue workflow 完美串联。
-- T69-T72 `done`: 补充了 30 个单元、集成与黄金基线回归测试，cache 命中及缓存机制已全面验证。
+- T62-T66 `done`: 基础报告与编译链路可用。
+- T67-T68 `partial`: workflow 有重试且 triage 内部并发，阶段编排仍受依赖链限制。
+- T69-T70 `done`: 核心单元与 CLI 集成链路已覆盖。
+- T71 `partial`: 已比较二次完整运行的候选、fallback ratio 和 coverage report；仍缺固定真实仓库基线。
+- T72 `partial`: 已验证 IR cache 命中和完整运行稳定性，尚未实现 index reuse 基准。
 
 ---
 

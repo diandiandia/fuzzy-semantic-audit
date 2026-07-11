@@ -1,6 +1,6 @@
 {
-  "route_patterns": [],
-  "guard_patterns": [],
-  "resource_patterns": [],
-  "state_machine_patterns": []
+  "route_patterns": ["app\\.(get|post|put|delete|use)", "router\\.(get|post|put|delete|use)", "req", "res"],
+  "guard_patterns": ["auth", "check", "passport", "session", "jwt"],
+  "resource_patterns": ["db", "query", "find", "mongoose", "sequelize", "pg"],
+  "state_machine_patterns": ["status", "state", "save", "update"]
 }

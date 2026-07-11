@@ -1,6 +1,6 @@
 {
-  "route_patterns": [],
-  "guard_patterns": [],
-  "resource_patterns": [],
-  "state_machine_patterns": []
+  "route_patterns": ["views\\.py", "view", "route", "api"],
+  "guard_patterns": ["login_required", "has_perm", "is_authenticated", "permission"],
+  "resource_patterns": ["models\\.py", "objects", "db", "query", "filter"],
+  "state_machine_patterns": ["status", "state", "save"]
 }

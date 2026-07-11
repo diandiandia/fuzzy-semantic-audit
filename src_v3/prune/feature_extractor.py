@@ -120,16 +120,30 @@ def extract_features(
         # Guard conflict score: unguarded represents high risk (1.0), guarded represents low risk (0.0)
         features["guard_conflict_score"] = max(0.0, 1.0 - 0.3 * guard_count)
         
-        # C. Parameter propagation approximation
+        # C. Parameter propagation analysis
         # Check if parameter signature or method body uses common input identifiers
         symbol_body = sn.attributes.get("symbol_body", "").lower()
         input_keywords = ["req", "request", "param", "body", "arg", "data", "payload", "input", "user_id", "query"]
+        
+        # Base score on direct keyword matches
         param_score = 0.2
         for kw in input_keywords:
-            if kw in symbol_body[:200]:
-                param_score += 0.2
+            if kw in symbol_body[:300]:
+                param_score += 0.15
             if kw in candidate.symbol.lower():
-                param_score += 0.3
+                param_score += 0.2
+                
+        # If reachable from an entrypoint, we check if the entrypoint passes parameters downstream
+        if reached_entrypoint:
+            param_score += 0.3
+            # If the entrypoint name contains request/input hints, increase confidence
+            for curr_id in visited:
+                curr_node = ir_store.get_node_by_id(curr_id)
+                if curr_node and "framework_entrypoint" in curr_node.attributes:
+                    if any(kw in curr_node.symbol.lower() for kw in ["req", "request", "param", "data"]):
+                        param_score += 0.2
+                        break
+                        
         features["parameter_propagation_score"] = min(1.0, param_score)
         
     return features
