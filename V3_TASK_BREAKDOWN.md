@@ -44,10 +44,10 @@
 | P4 Prune / Evidence / Verify | `partial` | 有可运行流程,但仍是简化版本,离 full V3 的证据与裁判机制有差距。 |
 | P5 Report / Workflow / E2E | `partial` | workflow/report/test 已有基础,但尚未形成完整回归、性能、黄金样例交付。 |
 
-截至 `2026-07-10` 按任务 DoD 重新校准:
+截至 `2026-07-11` 按任务 DoD 重新校准:
 
-- 已 100% 完成开发: `T04`、`T05`、`T08`、`T13`、`T14`、`T16`、`T17`、`T18`、`T22`、`T28`、`T29`、`T33`、`T35`、`T36`、`T40`、`T42`、`T43`、`T44`、`T46`、`T47`
-- 尚未 100% 完成开发: `T01-T03`、`T06-T07`、`T09-T12`、`T15`、`T19-T21`、`T23-T27`、`T30-T32`、`T34`、`T37-T39`、`T41`、`T45`、`T48-T72`
+- 已 100% 完成开发: `T04`、`T05`、`T06`、`T08`、`T10`、`T13`、`T14`、`T15`、`T16`、`T17`、`T18`、`T19`、`T22`、`T28`、`T29`、`T33`、`T35`、`T36`、`T40`、`T42`、`T43`、`T44`、`T46`、`T47`
+- 尚未 100% 完成开发: `T01-T03`、`T07`、`T09`、`T11-T12`、`T20-T21`、`T23-T27`、`T30-T32`、`T34`、`T37-T39`、`T41`、`T45`、`T48-T72`
 
 当前优先级最高的缺口:
 
@@ -162,23 +162,23 @@
 - T03 `partial`: 状态机已存在,但调用侧仍有“异常吞掉但状态成功”的问题。
 - T04 `done`: plan/run manifest 读写可用。
 - T05 `done`: event log / metrics 基础可用。
-- T06 `partial`: sqlite 与 store 存在,但仍需按 full implementation 补版本/约束验证。
+- T06 `done`: sqlite 已补充事务上下文、schema version 与基础约束初始化。
 - T07 `partial`: 可初始化 workspace,但边界约束与自定义 workspace 场景需要补验。
 - T08 `done`: workflow 骨架与 JSON contract 已建立。
 
 ### P1 当前判断
 
 - T09 `partial`: repo profiler 可运行,但未充分识别 workspace artifact / 历史审计目录。
-- T10 `partial`: framework detector 能给出基础结果,但无置信度回写,与 DoD 不完全一致。
+- T10 `done`: framework detector 已返回框架列表与置信度,且失败时保持 graceful fallback。
 - T11 `partial`: sharder 可切 shard,但目前仍可能把历史工作区与产物纳入 shard。
 - T12 `partial`: capability resolver 存在,但 effective capability 判定不符合 full V3 要求。
 - T13 `done`: parser provider base 已建立。
 - T14 `done`: native provider 已满足“至少一门语言解析 + 返回 parser tree + 暴露 fallback mode”的 DoD。
-- T15 `partial`: WASM provider 已建文件,需按 DoD 补足一致性验证。
+- T15 `done`: WASM provider 已具备独立 parse mode、版本标记与 native 一致接口。
 - T16 `done`: query loader 已支持按语言加载 `.scm` 与返回版本。
 - T17 `done`: IR builder 已稳定产出 `FileNode` / `SymbolNode` / `ImportEdge` 与基础属性。
 - T18 `done`: IR cache 基础可用。
-- T19 `partial`: IR store 可用,但查询面与 full implementation 目标仍有差距。
+- T19 `done`: IR store 已支持 nodes/edges 持久化与按 file/symbol/kind/source/destination 查询。
 - T20 `partial`: inventory CLI 可跑,但 repo/workspace 边界未达标。
 - T21 `partial`: build_ir CLI 可跑,但失败/降级透明性未达标。
 
