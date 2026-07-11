@@ -106,17 +106,17 @@ def main():
             fallback_count = sum(1 for node in shard_nodes if node.kind == "file" and node.attributes.get("parse_mode") in ["python_ast", "regex"])
             
             if error_count == total_files:
-                transition(shard, ShardStatus.FAILED.value, workspace_dir=workspace_dir)
+                transition(shard, ShardStatus.FAILED.value, metadata={"re_run_reason": "Incremental build IR run"}, workspace_dir=workspace_dir)
                 reason = f"Shard {shard.shard_id} parsing failed entirely ({error_count}/{total_files} files failed)."
                 if plan.run_manifest and reason not in plan.run_manifest.degradation_reasons:
                     plan.run_manifest.degradation_reasons.append(reason)
             elif error_count > 0 or fallback_count > 0:
-                transition(shard, ShardStatus.PARSED_FALLBACK.value, workspace_dir=workspace_dir)
+                transition(shard, ShardStatus.PARSED_FALLBACK.value, metadata={"re_run_reason": "Incremental build IR run"}, workspace_dir=workspace_dir)
                 reason = f"Shard {shard.shard_id} parsed with fallback/errors ({error_count} failed, {fallback_count} using fallback)."
                 if plan.run_manifest and reason not in plan.run_manifest.degradation_reasons:
                     plan.run_manifest.degradation_reasons.append(reason)
             else:
-                transition(shard, ShardStatus.PARSED.value, workspace_dir=workspace_dir)
+                transition(shard, ShardStatus.PARSED.value, metadata={"re_run_reason": "Incremental build IR run"}, workspace_dir=workspace_dir)
             
         conn.close()
         

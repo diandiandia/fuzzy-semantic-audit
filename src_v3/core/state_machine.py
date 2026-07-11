@@ -96,6 +96,15 @@ def transition(obj: Any, to_status: str, metadata: Optional[Dict[str, Any]] = No
     if not can_transition(kind, current_status, to_status):
         raise ValueError(f"Invalid transition for {kind}: {current_status} -> {to_status}")
         
+    # Enforce metadata constraints for backward transitions/re-runs to protect state integrity
+    if kind == "candidate" and current_status in [CandidateStatus.VERIFIED.value, CandidateStatus.FALSE_POSITIVE.value, CandidateStatus.NEEDS_REVIEW.value] and to_status == CandidateStatus.QUEUED_FOR_VERIFY.value:
+        if not metadata or not metadata.get("override_reason"):
+            raise ValueError(f"Transitioning candidate from terminal state '{current_status}' back to '{to_status}' requires 'override_reason' in metadata.")
+            
+    if kind == "shard" and current_status in [ShardStatus.RECALLED.value, ShardStatus.RECALLED_FALLBACK.value, ShardStatus.FAILED.value] and to_status in [ShardStatus.DISCOVERED.value, ShardStatus.PARSED.value, ShardStatus.PARSED_FALLBACK.value]:
+        if not metadata or not metadata.get("re_run_reason"):
+            raise ValueError(f"Re-running shard pipeline from '{current_status}' back to '{to_status}' requires 're_run_reason' in metadata.")
+        
     import datetime
     now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
     

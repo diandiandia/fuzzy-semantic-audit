@@ -1,14 +1,13 @@
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
 function runCommand(command, args) {
     const pythonPath = 'python3';
     const cliPath = path.join(__dirname, '..', 'src_v3', 'cli', `${command}.py`);
-    const fullCommand = `${pythonPath} ${cliPath} ${args.join(' ')}`;
-    console.error(`Running: ${fullCommand}`);
+    console.error(`Running: ${pythonPath} ${cliPath} ${args.join(' ')}`);
     try {
-        const output = execSync(fullCommand, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'inherit'] });
+        const output = execFileSync(pythonPath, [cliPath, ...args], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'inherit'] });
         try {
             return JSON.parse(output.trim());
         } catch (e) {

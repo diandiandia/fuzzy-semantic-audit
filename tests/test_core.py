@@ -45,6 +45,22 @@ class TestCore(unittest.TestCase):
         self.assertFalse(can_transition("candidate", CandidateStatus.DEFERRED, CandidateStatus.VERIFIED))
         # Valid: verifying -> verified
         self.assertTrue(can_transition("candidate", CandidateStatus.VERIFYING, CandidateStatus.VERIFIED))
+        
+        # Test backward transition metadata constraints
+        from src_v3.core.models import CandidateRecord
+        cand = CandidateRecord(
+            candidate_id="c1", identity_key="k1", shard_id="s1", lang="python",
+            file="app.py", symbol="foo", span={"start": 1, "end": 10}, priority_score=80.0,
+            status=CandidateStatus.VERIFIED.value
+        )
+        
+        # Should raise error without override_reason
+        with self.assertRaises(ValueError):
+            transition(cand, CandidateStatus.QUEUED_FOR_VERIFY.value)
+            
+        # Should succeed with override_reason
+        transition(cand, CandidateStatus.QUEUED_FOR_VERIFY.value, metadata={"override_reason": "Re-run verify"})
+        self.assertEqual(cand.status, CandidateStatus.QUEUED_FOR_VERIFY.value)
 
     def test_plan_io(self):
         plan_path = os.path.join(self.tmp_dir, "audit_plan.json")

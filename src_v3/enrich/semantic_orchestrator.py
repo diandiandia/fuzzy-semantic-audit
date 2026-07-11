@@ -48,8 +48,20 @@ def enrich_semantic_relations(
                 if caller_node:
                     from src_v3.enrich.call_edge_builder import CallEdgeBuilder
                     new_edges.append(CallEdgeBuilder.build_call_edge(caller_node, sn, semantic_provider))
-        except Exception:
-            pass
+        except Exception as e:
+            from src_v3.core.event_log import log_event
+            log_event(workspace_dir, "semantic_orchestrator", "error", f"Failed to find callers for symbol {sn.symbol} in file {sn.file}: {str(e)}")
+            from src_v3.core.plan_io import load_plan, save_plan
+            plan_path = os.path.join(workspace_dir, "audit_plan.json")
+            if os.path.exists(plan_path):
+                try:
+                    plan = load_plan(plan_path)
+                    reason = f"Enrichment error (callers) on {sn.symbol} in {sn.file}: {str(e)}"
+                    if plan.run_manifest and reason not in plan.run_manifest.degradation_reasons:
+                        plan.run_manifest.degradation_reasons.append(reason)
+                        save_plan(plan, plan_path)
+                except Exception:
+                    pass
             
         # B. Find callees
         try:
@@ -68,8 +80,20 @@ def enrich_semantic_relations(
                 if callee_node:
                     from src_v3.enrich.call_edge_builder import CallEdgeBuilder
                     new_edges.append(CallEdgeBuilder.build_call_edge(sn, callee_node, semantic_provider))
-        except Exception:
-            pass
+        except Exception as e:
+            from src_v3.core.event_log import log_event
+            log_event(workspace_dir, "semantic_orchestrator", "error", f"Failed to find callees for symbol {sn.symbol} in file {sn.file}: {str(e)}")
+            from src_v3.core.plan_io import load_plan, save_plan
+            plan_path = os.path.join(workspace_dir, "audit_plan.json")
+            if os.path.exists(plan_path):
+                try:
+                    plan = load_plan(plan_path)
+                    reason = f"Enrichment error (callees) on {sn.symbol} in {sn.file}: {str(e)}"
+                    if plan.run_manifest and reason not in plan.run_manifest.degradation_reasons:
+                        plan.run_manifest.degradation_reasons.append(reason)
+                        save_plan(plan, plan_path)
+                except Exception:
+                    pass
 
     # 2. Resolve fuzzy imports
     # Let's read all edges and see if we can resolve 'import_xxx' targets to actual FileNodes

@@ -47,13 +47,11 @@ def recall_by_rules(workspace_dir: str, shard: LanguageShard, track: str) -> Lis
     candidates = []
     
     # Load plan configurations and resolve the true repository root path
-    try:
-        plan = load_plan(os.path.join(workspace_dir, "audit_plan.json"))
-        config = plan.summary.get("config", {})
-        repo_root = plan.repo_path if plan.repo_path else os.path.dirname(os.path.abspath(workspace_dir))
-    except Exception:
-        config = {}
-        repo_root = os.path.dirname(os.path.abspath(workspace_dir))
+    plan = load_plan(os.path.join(workspace_dir, "audit_plan.json"))
+    if not plan or not plan.repo_path:
+        raise ValueError("Cannot resolve repository root: audit plan missing or invalid repo_path")
+    config = plan.summary.get("config", {})
+    repo_root = os.path.abspath(plan.repo_path)
         
     # 1. Resolve tool-bundled rules directory (from versioned tracks pack)
     from src_v3.packs.tracks import AUDIT_TRACKS

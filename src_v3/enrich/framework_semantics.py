@@ -1,8 +1,27 @@
+import os
 from typing import List, Dict, Any
 from src_v3.core.models import LanguageShard, Entrypoint, GuardCheck, ResourceAccess, StateTransition
 from src_v3.providers.framework.base import FrameworkProvider
 from src_v3.storage.ir_store import IRStore
 from src_v3.enrich.entrypoint_extractor import EntrypointExtractor
+from src_v3.core.event_log import log_event
+from src_v3.core.plan_io import load_plan, save_plan
+
+def _handle_framework_error(workspace_dir: str, provider: FrameworkProvider, stage: str, e: Exception) -> None:
+    """
+    Logs framework enrichment errors and appends them to degradation reasons to avoid swallowing exceptions.
+    """
+    log_event(workspace_dir, "framework_semantics", "error", f"Error in provider {provider.framework_name} during {stage}: {str(e)}")
+    plan_path = os.path.join(workspace_dir, "audit_plan.json")
+    if os.path.exists(plan_path):
+        try:
+            plan = load_plan(plan_path)
+            reason = f"Framework provider {provider.framework_name} failed in {stage}: {str(e)}"
+            if plan.run_manifest and reason not in plan.run_manifest.degradation_reasons:
+                plan.run_manifest.degradation_reasons.append(reason)
+                save_plan(plan, plan_path)
+        except Exception:
+            pass
 
 def enrich_framework_semantics(
     workspace_dir: str, 
@@ -22,8 +41,6 @@ def enrich_framework_semantics(
     updated_count = 0
     new_nodes = []
     
-    
-    
     for provider in framework_providers:
         # A. Extract entrypoints for backward compatibility attribute matching
         try:
@@ -38,8 +55,8 @@ def enrich_framework_semantics(
                         "provider_name": provider.framework_name
                     }
                     updated_count += 1
-        except Exception:
-            pass
+        except Exception as e:
+            _handle_framework_error(workspace_dir, provider, "extract_entrypoints", e)
             
         # B. Extract and instantiate concrete GuardCheck IR nodes
         try:
@@ -68,8 +85,8 @@ def enrich_framework_semantics(
                             "provider_name": provider.framework_name
                         }
                     ))
-        except Exception:
-            pass
+        except Exception as e:
+            _handle_framework_error(workspace_dir, provider, "extract_guards", e)
             
         # C. Extract and instantiate concrete ResourceAccess IR nodes
         try:
@@ -98,8 +115,8 @@ def enrich_framework_semantics(
                             "provider_name": provider.framework_name
                         }
                     ))
-        except Exception:
-            pass
+        except Exception as e:
+            _handle_framework_error(workspace_dir, provider, "extract_resources", e)
             
         # D. Extract and instantiate concrete StateTransition IR nodes
         try:
@@ -130,8 +147,8 @@ def enrich_framework_semantics(
                             "provider_name": provider.framework_name
                         }
                     ))
-        except Exception:
-            pass
+        except Exception as e:
+            _handle_framework_error(workspace_dir, provider, "extract_state_transitions", e)
             
     # Save the updated symbol nodes back to the IRStore
     if updated_count > 0:

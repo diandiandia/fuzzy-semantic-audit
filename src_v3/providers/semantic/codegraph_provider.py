@@ -25,6 +25,8 @@ class CodeGraphProvider(SemanticProvider):
                 self.use_fallback = True
 
     def capability_level(self) -> str:
+        if self.use_fallback:
+            return CapabilityLevel.L2.value
         return CapabilityLevel.L3.value
 
     def resolution_confidence(self) -> float:

@@ -41,19 +41,28 @@ def resolve_semantic(lang: str, config: Dict[str, Any], repo_path: str = "", ir_
         if pref == "lsp":
             addr = config.get("lsp_server_address")
             if addr:
-                return LSPProvider(addr, repo_path, ir_store)
+                p = LSPProvider(addr, repo_path, ir_store)
+                if p.use_fallback and degradation_list is not None:
+                    degradation_list.append(f"LSPProvider failed to connect to {addr}: using fallback ctags/heuristics")
+                return p
             elif degradation_list is not None:
                 degradation_list.append("lsp preferred but lsp_server_address is missing in config")
         elif pref == "lsif":
             lsif_path = config.get("lsif_path")
             if lsif_path:
-                return LSIFProvider(lsif_path, repo_path, ir_store)
+                p = LSIFProvider(lsif_path, repo_path, ir_store)
+                if p.use_fallback and degradation_list is not None:
+                    degradation_list.append(f"LSIFProvider failed to load or parse LSIF file at {lsif_path}: using fallback ctags/heuristics")
+                return p
             elif degradation_list is not None:
                 degradation_list.append("lsif preferred but lsif_path is missing in config")
         elif pref == "codegraph":
             endpoint = config.get("codegraph_endpoint")
             if endpoint:
-                return CodeGraphProvider(endpoint, repo_path, ir_store)
+                p = CodeGraphProvider(endpoint, repo_path, ir_store)
+                if p.use_fallback and degradation_list is not None:
+                    degradation_list.append(f"CodeGraphProvider failed to connect to endpoint {endpoint}: using fallback ctags/heuristics")
+                return p
             elif degradation_list is not None:
                 degradation_list.append("codegraph preferred but codegraph_endpoint is missing in config")
         elif pref == "ctags":
