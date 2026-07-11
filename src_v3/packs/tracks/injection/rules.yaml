@@ -1,0 +1,12 @@
+track: injection
+rules:
+  - id: injection.command.exec
+    pattern: (?i)(exec|eval|system|run|subprocess|popen|spawn)
+    kind: function
+    ast_query: |
+      (function_definition name: (identifier) @name)
+  - id: injection.sql.query
+    pattern: (?i)(sql|select|query|execute|db)
+    kind: function
+    ast_query: |
+      (function_definition name: (identifier) @name)

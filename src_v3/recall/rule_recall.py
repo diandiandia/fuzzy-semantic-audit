@@ -24,7 +24,10 @@ def load_declarative_rules(rules_dir: str, track: str) -> List[Dict[str, Any]]:
     """
     Loads declarative YAML rules for a given track from the rules directory.
     """
-    rules_path = os.path.join(rules_dir, f"{track}.yaml")
+    rules_path = os.path.join(rules_dir, "rules.yaml")
+    if not os.path.exists(rules_path):
+        rules_path = os.path.join(rules_dir, f"{track}.yaml")
+        
     if not os.path.exists(rules_path):
         return []
         
@@ -52,9 +55,9 @@ def recall_by_rules(workspace_dir: str, shard: LanguageShard, track: str) -> Lis
         config = {}
         repo_root = os.path.dirname(os.path.abspath(workspace_dir))
         
-    # 1. Resolve tool-bundled rules directory
-    tool_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    tool_rules_dir = os.path.join(tool_root, "rules")
+    # 1. Resolve tool-bundled rules directory (from versioned tracks pack)
+    from src_v3.packs.tracks import AUDIT_TRACKS
+    tool_rules_dir = AUDIT_TRACKS.get(track, "")
     
     # 2. Resolve project-specific rules directory
     repo_rules_dir = os.path.join(repo_root, "rules")

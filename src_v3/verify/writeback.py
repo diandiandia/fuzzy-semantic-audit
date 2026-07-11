@@ -29,6 +29,7 @@ class VerificationWriteback:
         self.candidate_store.upsert_candidates(updated_candidates, pruned=True)
         
         # 2. Append to verification_results.jsonl
+        os.makedirs(os.path.dirname(self.results_path), exist_ok=True)
         with open(self.results_path, 'a', encoding='utf-8') as f:
             for res in new_results:
                 f.write(json.dumps(res.to_dict(), ensure_ascii=False) + "\n")

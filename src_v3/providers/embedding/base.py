@@ -1,4 +1,15 @@
+import math
 from typing import List, Dict, Any
+
+def cosine_similarity(v1: List[float], v2: List[float]) -> float:
+    if not v1 or not v2 or len(v1) != len(v2):
+        return 0.0
+    dot_product = sum(x * y for x, y in zip(v1, v2))
+    norm_v1 = math.sqrt(sum(x * x for x in v1))
+    norm_v2 = math.sqrt(sum(x * x for x in v2))
+    if norm_v1 == 0.0 or norm_v2 == 0.0:
+        return 0.0
+    return dot_product / (norm_v1 * norm_v2)
 
 class EmbeddingProvider:
     """

@@ -47,7 +47,7 @@ def compile_coverage_report(workspace_dir: str, plan: AuditPlan) -> str:
     
     if reasons:
         lines.append("### Transparent Degradation Reasons")
-        for r in reasons:
+        for r in sorted(reasons):
             lines.append(f"- {r}")
         lines.append("")
         

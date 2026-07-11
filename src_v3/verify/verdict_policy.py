@@ -8,6 +8,11 @@ def evaluate_verdict(
     """
     Combines three-lens votes and capability levels into a final security verdict.
     Supported output states: verified, false_positive, needs_review, deferred, error.
+    
+    Lenses:
+    - reachability: YES / NO / MAYBE
+    - guarded: YES / NO / PARTIAL / MAYBE
+    - exploitability: YES / NO / MAYBE
     """
     reach = str(votes.get("reachability", "MAYBE")).upper()
     guard = str(votes.get("guarded", "MAYBE")).upper()
@@ -21,21 +26,27 @@ def evaluate_verdict(
     if "DEFER" in [reach, guard, exploit] or "DEFERRED" in [reach, guard, exploit] or votes.get("deferred"):
         return "deferred", "Verification deferred by referee request."
         
-    # If candidate requires L3 dynamic capabilities but run is degraded, defer verification
-    if candidate_capability == "L3" and run_capability in ["L0", "L1", "L2"]:
-        if reach == "MAYBE" or exploit == "MAYBE":
-            return "deferred", f"Verification deferred: L3 candidate '{candidate_capability}' cannot be verified under degraded run capability '{run_capability}'."
+    # 3. Capability-based verification check (degradation awareness)
+    # Check if run capability is sufficient to verify the candidate capability.
+    cap_levels = {"L0": 0, "L1": 1, "L2": 2, "L3": 3}
+    cand_level = cap_levels.get(candidate_capability or "L0", 0)
+    run_level = cap_levels.get(run_capability or "L0", 0)
+    
+    if run_level < cand_level:
+        # If run is degraded and referee votes are not definitive, we must defer to avoid false positives/negatives
+        if "MAYBE" in [reach, guard, exploit] or guard == "PARTIAL":
+            return "deferred", f"Verification deferred: Candidate capability '{candidate_capability}' exceeds run capability '{run_capability}', and referee votes are indeterminate."
             
-    # 3. Blocked by guard or clearly unreachable/non-exploitable -> False Positive
+    # 4. Blocked by guard or clearly unreachable/non-exploitable -> False Positive
     if reach == "NO" or exploit == "NO":
         return "false_positive", "Candidate is confirmed unreachable or non-exploitable by referee scan."
         
     if guard == "YES":
         return "false_positive", "Potential path exists but is fully blocked by active authorization guards."
         
-    # 4. Confirmed reachable, unguarded, and exploitable -> Verified Vulnerability
+    # 5. Confirmed reachable, unguarded, and exploitable -> Verified Vulnerability
     if reach == "YES" and guard == "NO" and exploit == "YES":
         return "verified", "Reachable, unguarded, and exploitable code path confirmed by all lenses."
         
-    # 5. Everything else -> Needs Manual Review
+    # 6. Everything else -> Needs Manual Review
     return "needs_review", f"Indeterminate status (Reachability: {reach}, Guarded: {guard}, Exploitability: {exploit}). Requires manual triage."

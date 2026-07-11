@@ -63,7 +63,7 @@ def main():
         # 1. Score all candidates
         for cand in recalled:
             features = extract_features(workspace_dir, cand, ir_store)
-            cand.priority_score = calculate_priority_score(features, config)
+            cand.priority_score = calculate_priority_score(features, config, cand.source_tracks)
             
         # 2. Perform static pruning
         kept, metrics = prune_candidates(recalled, threshold=args.threshold)

@@ -22,8 +22,7 @@ def enrich_framework_semantics(
     updated_count = 0
     new_nodes = []
     
-    # 1. Run structured entrypoint extraction and registration
-    EntrypointExtractor.extract_and_register(workspace_dir, shard, framework_providers)
+    
     
     for provider in framework_providers:
         # A. Extract entrypoints for backward compatibility attribute matching
@@ -142,3 +141,6 @@ def enrich_framework_semantics(
     # Save the newly instantiated framework IR nodes
     if new_nodes:
         ir_store.save(new_nodes, [], overwrite=False)
+
+    # Run structured entrypoint extraction and registration
+    EntrypointExtractor.extract_and_register(workspace_dir, shard, framework_providers)

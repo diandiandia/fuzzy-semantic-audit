@@ -58,7 +58,7 @@ def main():
                 
             # 1. Resolve providers
             parser = resolve_parser(shard.lang, config)
-            semantic = resolve_semantic(shard.lang, config, repo_path, ir_store)
+            semantic = resolve_semantic(shard.lang, config, repo_path, ir_store, degradation_reasons)
             embedding = resolve_embedding(config)
             
             # Update provider set
@@ -139,9 +139,12 @@ def main():
                 has_fallback_semantic = True
                 degradation_reasons.append(f"Shard {shard.shard_id}: using CtagsProvider for semantic analysis")
             elif semantic.provider_name in ["LSPProvider", "LSIFProvider", "CodeGraphProvider"]:
-                semantic_status = "indexed_fallback"
-                has_fallback_semantic = True
-                degradation_reasons.append(f"Shard {shard.shard_id}: using heuristic simulated {semantic.provider_name} fallback (no live backend connection)")
+                if semantic.resolution_confidence() > 0.5:
+                    semantic_status = "indexed"
+                else:
+                    semantic_status = "indexed_fallback"
+                    has_fallback_semantic = True
+                    degradation_reasons.append(f"Shard {shard.shard_id}: using heuristic simulated {semantic.provider_name} fallback (no live backend connection)")
             elif semantic.provider_name == "NullProvider":
                 semantic_status = "failed"
                 degradation_reasons.append(f"Shard {shard.shard_id}: semantic provider failed")
@@ -173,7 +176,7 @@ def main():
             
             # Resolve effective capability achieved based on actual data outputs produced
             from src_v3.inventory.capability_resolver import resolve_effective_capability
-            shard.capability = resolve_effective_capability(shard, ir_store, semantic_index_data)
+            shard.capability = resolve_effective_capability(shard, ir_store, semantic_index_data, semantic)
             
             # Determine Shard final status
             from src_v3.core.state_machine import transition
@@ -210,7 +213,10 @@ def main():
         # 5. Update overall RunManifest
         if plan.run_manifest:
             manifest = plan.run_manifest
-            if has_fallback_lexical or has_parser_fallback:
+            active_shards = [s for s in plan.language_shards if s.status != ShardStatus.FAILED.value]
+            if not active_shards:
+                manifest.run_mode = RunMode.RULE_ONLY.value
+            elif has_fallback_lexical or has_parser_fallback:
                 manifest.run_mode = RunMode.LEXICAL_FALLBACK.value
             elif has_fallback_semantic:
                 manifest.run_mode = RunMode.SEMANTIC_FALLBACK.value

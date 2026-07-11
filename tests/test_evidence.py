@@ -1,5 +1,5 @@
 import unittest
-from src_v3.evidence.completeness import calculate_completeness_score
+from src_v3.evidence.completeness import calculate_completeness_score, determine_evidence_gaps
 
 class TestEvidence(unittest.TestCase):
     def test_completeness_score(self):
@@ -24,6 +24,23 @@ class TestEvidence(unittest.TestCase):
         }
         score3 = calculate_completeness_score(bundle3)
         self.assertEqual(score3, 100) # Full completeness score (100)
+
+    def test_determine_evidence_gaps(self):
+        # 1. Empty bundle should flag gaps
+        bundle = {}
+        gaps = determine_evidence_gaps(bundle, ["authz"])
+        self.assertTrue(any("missing symbol body" in g for g in gaps))
+        self.assertTrue(any("missing authorization guard" in g for g in gaps))
+
+        # 2. Complete bundle should have no gaps
+        bundle_complete = {
+            "symbol_body": "def foo(): pass",
+            "caller_chain": [{"symbol": "bar"}],
+            "upstream_entrypoints": [{"symbol": "api"}],
+            "guard_snippets": [{"symbol": "guard"}]
+        }
+        gaps2 = determine_evidence_gaps(bundle_complete, ["authz"])
+        self.assertEqual(len(gaps2), 0)
 
 if __name__ == "__main__":
     unittest.main()

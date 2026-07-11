@@ -1,0 +1,12 @@
+track: concurrency
+rules:
+  - id: concurrency.lock.unsafe
+    pattern: (?i)(lock|acquire|release|mutex|semaphore|critical_section)
+    kind: function
+    ast_query: |
+      (function_definition name: (identifier) @name)
+  - id: concurrency.thread.spawn
+    pattern: (?i)(thread|spawn|fork|async|run_in_background|worker)
+    kind: function
+    ast_query: |
+      (function_definition name: (identifier) @name)

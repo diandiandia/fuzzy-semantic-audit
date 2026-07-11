@@ -28,7 +28,7 @@ def resolve_parser(lang: str, config: Dict[str, Any]) -> ParserProvider:
         return TreeSitterWASMProvider()
     return TreeSitterNativeProvider()
 
-def resolve_semantic(lang: str, config: Dict[str, Any], repo_path: str = "", ir_store: Any = None) -> SemanticProvider:
+def resolve_semantic(lang: str, config: Dict[str, Any], repo_path: str = "", ir_store: Any = None, degradation_list: Optional[List[str]] = None) -> SemanticProvider:
     """
     Selects semantic provider based on preference and availability:
     LSP -> LSIF -> CodeGraph -> Ctags -> Null
@@ -42,17 +42,25 @@ def resolve_semantic(lang: str, config: Dict[str, Any], repo_path: str = "", ir_
             addr = config.get("lsp_server_address")
             if addr:
                 return LSPProvider(addr, repo_path, ir_store)
+            elif degradation_list is not None:
+                degradation_list.append("lsp preferred but lsp_server_address is missing in config")
         elif pref == "lsif":
             lsif_path = config.get("lsif_path")
             if lsif_path:
                 return LSIFProvider(lsif_path, repo_path, ir_store)
+            elif degradation_list is not None:
+                degradation_list.append("lsif preferred but lsif_path is missing in config")
         elif pref == "codegraph":
             endpoint = config.get("codegraph_endpoint")
             if endpoint:
                 return CodeGraphProvider(endpoint, repo_path, ir_store)
+            elif degradation_list is not None:
+                degradation_list.append("codegraph preferred but codegraph_endpoint is missing in config")
         elif pref == "ctags":
             if repo_path and ir_store:
                 return CtagsProvider(repo_path, ir_store)
+            elif degradation_list is not None:
+                degradation_list.append("ctags preferred but repo_path or ir_store is missing")
         elif pref == "null":
             return NullProvider()
             

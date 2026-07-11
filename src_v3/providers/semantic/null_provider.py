@@ -6,7 +6,7 @@ class NullProvider(SemanticProvider):
     provider_name: str = "NullProvider"
 
     def capability_level(self) -> str:
-        return CapabilityLevel.L1 # Or L0/L1 since it provides no semantic graph
+        return CapabilityLevel.L0.value
 
     def resolution_confidence(self) -> float:
         return 0.0

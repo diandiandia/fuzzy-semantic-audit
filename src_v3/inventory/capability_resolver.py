@@ -29,7 +29,7 @@ def resolve_shard_capability(shard: LanguageShard) -> str:
         
     return CapabilityLevel.L2.value
 
-def resolve_effective_capability(shard: LanguageShard, ir_store: IRStore, semantic_index: Dict[str, Any]) -> str:
+def resolve_effective_capability(shard: LanguageShard, ir_store: IRStore, semantic_index: Dict[str, Any], semantic_provider: Any = None) -> str:
     """
     Resolves the effective capability level achieved by a shard, mapping it 
     directly to the actual structure and cross-reference outputs produced.
@@ -77,9 +77,18 @@ def resolve_effective_capability(shard: LanguageShard, ir_store: IRStore, semant
         has_deep = True
         
     sem_prov_name = shard.provider_set.get("semantic", "NullProvider")
-    # All simulated/heuristic providers (LSP, LSIF, CodeGraph) in this codebase are treated as fallbacks
-    is_fallback_sem = (sem_prov_name in ["CtagsProvider", "NullProvider", "LSPProvider", "LSIFProvider", "CodeGraphProvider"])
     
+    # Determine if semantic provider is in fallback mode
+    is_fallback_sem = True
+    if sem_prov_name not in ["CtagsProvider", "NullProvider"]:
+        if semantic_provider is not None:
+            # If it has non-zero resolution confidence (e.g. > 0.5 because mock/simulated provider got endpoint configured), it's not a fallback
+            if semantic_provider.resolution_confidence() > 0.5:
+                is_fallback_sem = False
+        else:
+            # Default to True for safety if not passed
+            pass
+            
     if has_deep and not is_fallback_sem:
         effective_cap = CapabilityLevel.L3.value
     elif effective_cap == CapabilityLevel.L3.value:

@@ -2,7 +2,7 @@ import os
 from typing import List, Dict, Any, Optional
 from src_v3.core.models import CandidateRecord, EvidenceBundle, IRNode
 from src_v3.storage.ir_store import IRStore
-from src_v3.evidence.completeness import calculate_completeness_score
+from src_v3.evidence.completeness import calculate_completeness_score, determine_evidence_gaps
 
 def get_node_source(repo_path: str, node: IRNode) -> str:
     """
@@ -195,7 +195,8 @@ def assemble_evidence(
         "provider_trace": candidate.provider_trace
     }
     
-    score = calculate_completeness_score(bundle_dict)
+    score = calculate_completeness_score(bundle_dict, candidate.source_tracks)
+    gaps = determine_evidence_gaps(bundle_dict, candidate.source_tracks)
     
     return EvidenceBundle(
         candidate_id=candidate.candidate_id,
@@ -208,5 +209,6 @@ def assemble_evidence(
         state_transition_snippets=state_transition_snippets,
         type_or_model_context=[],
         provider_trace=candidate.provider_trace,
-        evidence_completeness_score=score
+        evidence_completeness_score=score,
+        evidence_gaps=gaps
     )

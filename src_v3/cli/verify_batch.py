@@ -158,6 +158,51 @@ def main():
             for item in batch_data:
                 cand_dict = item["candidate"]
                 cand = CandidateRecord.from_dict(cand_dict)
+                
+                # Interruption recovery: check if candidate is already processed
+                existing_cand = candidate_store.get_candidate_by_id(cand.candidate_id, pruned=True)
+                if existing_cand and existing_cand.status in ["verified", "false_positive", "needs_review", "deferred", "error"]:
+                    verdict = existing_cand.status
+                    reason = "Already verified (restored from previous run)."
+                    cand.status = verdict
+                    
+                    if verdict == "verified":
+                        verified_count += 1
+                    elif verdict == "false_positive":
+                        fp_count += 1
+                    elif verdict == "deferred":
+                        deferred_count += 1
+                    elif verdict == "error":
+                        error_count += 1
+                    else:
+                        needs_review_count += 1
+                        
+                    results_path = os.path.join(workspace_dir, "evidence", "verification_results.jsonl")
+                    already_logged = False
+                    if os.path.exists(results_path):
+                        with open(results_path, 'r', encoding='utf-8') as f:
+                            for line in f:
+                                if line.strip():
+                                    res_dict = json.loads(line.strip())
+                                    if res_dict.get("candidate_id") == cand.candidate_id:
+                                        already_logged = True
+                                        break
+                    
+                    if not already_logged:
+                        res = VerificationResult(
+                            candidate_id=cand.candidate_id,
+                            verdict=verdict,
+                            reason=reason,
+                            confidence=cand.priority_score / 100.0,
+                            referee_votes=[item.get("votes", {})],
+                            evidence=[],
+                            written_at=datetime.datetime.now(datetime.timezone.utc).isoformat()
+                        )
+                        new_results.append(res)
+                        
+                    updated_candidates.append(cand)
+                    continue
+
                 votes = item.get("votes", {})
                 
                 # Check if votes are default/unfilled

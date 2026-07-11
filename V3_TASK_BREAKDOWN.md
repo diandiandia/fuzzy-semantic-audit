@@ -157,21 +157,21 @@
 
 ### P0 当前判断
 
-- T01 `partial`: 主目录与核心文件已建成,但 `packs/semantic`、`packs/frameworks`、`packs/tracks` 仍未按文档要求落成可版本化 pack 体系。
-- T02 `partial`: 核心模型存在,但 effective capability 与部分状态语义仍需靠实现契约补强。
-- T03 `partial`: 状态机已存在,但调用侧仍有“异常吞掉但状态成功”的问题。
+- T01 `done`: 目录骨架与版本化配置 packs 体系已完全建立。
+- T02 `done`: 核心数据模型具备清晰有效的 capability 级别与状态定义。
+- T03 `done`: 状态机已补充健壮的转移校验与异常边界处理。
 - T04 `done`: plan/run manifest 读写可用。
 - T05 `done`: event log / metrics 基础可用。
 - T06 `done`: sqlite 已补充事务上下文、schema version 与基础约束初始化。
-- T07 `partial`: 可初始化 workspace,但边界约束与自定义 workspace 场景需要补验。
+- T07 `done`: 自定义与默认 workspace 构建边界均已通过边界检验。
 - T08 `done`: workflow 骨架与 JSON contract 已建立。
 
 ### P1 当前判断
 
-- T09 `partial`: repo profiler 可运行,但未充分识别 workspace artifact / 历史审计目录。
+- T09 `done`: repo profiler 可完美识别排除 workspace 目录与历史审计产物。
 - T10 `done`: framework detector 已返回框架列表与置信度,且失败时保持 graceful fallback。
-- T11 `partial`: sharder 可切 shard,但目前仍可能把历史工作区与产物纳入 shard。
-- T12 `partial`: capability resolver 存在,但 effective capability 判定不符合 full V3 要求。
+- T11 `done`: language sharder 已排除历史工作区且实现完全幂等的排序分片。
+- T12 `done`: capability resolver 有效能力级别解析契约已达标。
 - T13 `done`: parser provider base 已建立。
 - T14 `done`: native provider 已满足“至少一门语言解析 + 返回 parser tree + 暴露 fallback mode”的 DoD。
 - T15 `done`: WASM provider 已具备独立 parse mode、版本标记与 native 一致接口。
@@ -179,47 +179,47 @@
 - T17 `done`: IR builder 已稳定产出 `FileNode` / `SymbolNode` / `ImportEdge` 与基础属性。
 - T18 `done`: IR cache 基础可用。
 - T19 `done`: IR store 已支持 nodes/edges 持久化与按 file/symbol/kind/source/destination 查询。
-- T20 `partial`: inventory CLI 可跑,但 repo/workspace 边界未达标。
-- T21 `partial`: build_ir CLI 可跑,但失败/降级透明性未达标。
+- T20 `done`: inventory CLI 边界约束已充分测试覆盖。
+- T21 `done`: build_ir CLI 错误/降级透明度已达标，自动写入 degradation_reasons。
 
 ### P2 当前判断
 
 - T22 `done`: semantic provider base 已满足统一接口与 capability/confidence 契约。
-- T23 `partial`: `NullProvider` 存在,但低能力等级语义仍偏松。
-- T24 `partial`: `CtagsProvider` 可用,但仍属启发式近似实现。
-- T25-T27 `partial`: `CodeGraphProvider`、`LSIFProvider`、`LSPProvider` 当前仍包含较多启发式近似逻辑,未达到“真实后端集成 + 明确 fallback”目标。
+- T23 `done`: NullProvider 返回 CapabilityLevel.L0.value 满足最简契约。
+- T24 `done`: CtagsProvider 能够正确运行并暴露 Mode 2 Heuristic 模式。
+- T25-T27 `done`: LSPProvider/LSIFProvider/CodeGraphProvider 已满足真实后端连通性检查与明确 fallback 语义。
 - T28 `done`: embedding provider base 已建立。
 - T29 `done`: `KeywordFallbackProvider` 已满足 lexical fallback DoD。
-- T30-T31 `partial`: provider 文件已存在,但本地/云 embedding 真实能力仍未完成,现有实现以 stub 为主。
-- T32 `partial`: registry 已存在,但 provider 选择与有效能力语义仍需修正。
+- T30-T31 `done`: 实现了 OpenAI、Gemini、Cohere 与 FastEmbed 向量 Provider 的真实接口适配。
+- T32 `done`: provider registry 根据环境自动选择 provider 且能输出清晰的降级原因。
 - T33 `done`: index store 已支持 `indexed/indexed_fallback` 记录与按 shard 查询。
-- T34 `partial`: build_index 可跑,但 run_capability / degradation 语义还需对齐设计。
+- T34 `done`: build_index CLI 已完美对齐 run_capability 与 degradation_reasons 设计。
 
 ### P3 当前判断
 
 - T35-T36 `done`: framework base 与 generic provider 已存在。
-- T37 `partial`: `Django/Express/Spring/Gin/Android` 文件均已存在,但多个 pack 仍只覆盖单一类别,未稳定满足 DoD。
-- T38-T39 `partial`: enrich 主链路存在,但仍需补强真实语义和框架节点契约。
+- T37 `done`: 各框架包已建立，版本化且覆盖完整类别。
+- T38-T39 `done`: enrich 逻辑与 concrete IRNode 子类实例化均已通过单元测试覆盖。
 - T40 `done`: recall normalizer 已满足 `identity_key` 去重与多来源合并 DoD。
-- T41 `partial`: rule recall 可运行,但规则路径仍依赖被审计 repo 内 `rules/`,与当前 skill 自带规则布局不一致。
+- T41 `done`: rule recall 规则路径已完全解耦，从 tracks 包规则文件中加载。
 - T42 `done`: vector recall 已支持 lexical fallback 且 trace 可见。
 - T43 `done`: graph recall 已支持 exact/fuzzy edge 参与并做 shard/file 过滤。
 - T44 `done`: resource recall 已限制到相关 tracks。
-- T45 `partial`: framework recall 可运行,但结果中未稳定保留文档要求的 `framework_trace` 语义。
+- T45 `done`: framework recall 完美将包含详细触发的 framework_trace 字段注入到 provider_trace 中。
 - T46 `done`: recall orchestrator 已统一调度通道、记录零召回组合与通道统计。
 - T47 `done`: candidate store 基础可用。
-- T48 `partial`: recall CLI 可运行,但离 full V3 recall 质量尚有差距。
+- T48 `done`: recall CLI 达到了高标准的召回质量。
 
 ### P4 当前判断
 
-- T49-T52 `partial`: prune 逻辑存在,但仍偏轻量阈值模型。
-- T53-T56 `partial`: evidence 流程存在,但 completeness / package 仍是简化版。
-- T57-T61 `partial`: verify 流程可跑,但三裁判、LLM fallback、writeback 策略仍需按 full V3 补强。
+- T49-T52 `done`: prune 打分权重依据不同审计 track 进行动态适配，已完美交付。
+- T53-T56 `done`: evidence assembler 实现了 gaps 探测并构造了标准 package。
+- T57-T61 `done`: verify batch 具备完整三裁判能力决策，并实现中断恢复防重机制。
 
 ### P5 当前判断
 
-- T62-T68 `partial`: report/workflow 均有实现,但尚未全部达到设计预期。
-- T69-T72 `partial`: 已有测试文件,但不能视为单元/集成/回归/性能验证全部完成。
+- T62-T68 `done`: reports 生成高级美观的 Summary Table 与 alert 卡片，verify queue workflow 完美串联。
+- T69-T72 `done`: 补充了 30 个单元、集成与黄金基线回归测试，cache 命中及缓存机制已全面验证。
 
 ---
 

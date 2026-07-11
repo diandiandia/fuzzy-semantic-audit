@@ -223,6 +223,7 @@ class EvidenceBundle:
     type_or_model_context: List[Dict[str, Any]] = field(default_factory=list)
     provider_trace: List[str] = field(default_factory=list)
     evidence_completeness_score: int = 0
+    evidence_gaps: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
@@ -240,7 +241,8 @@ class EvidenceBundle:
             state_transition_snippets=data.get("state_transition_snippets", []),
             type_or_model_context=data.get("type_or_model_context", []),
             provider_trace=data.get("provider_trace", []),
-            evidence_completeness_score=data.get("evidence_completeness_score", 0)
+            evidence_completeness_score=data.get("evidence_completeness_score", 0),
+            evidence_gaps=data.get("evidence_gaps", [])
         )
 
 @dataclass

@@ -18,6 +18,11 @@ def shard_repository(repo_path: str, profile: RepoProfile, workspace_dir: str = 
     unsupported_files: List[str] = []
     
     for root, dirs, files in os.walk(repo_path):
+        abs_root = os.path.abspath(root)
+        if abs_workspace and (abs_root == abs_workspace or abs_root.startswith(abs_workspace + os.sep)):
+            dirs[:] = []
+            continue
+
         # Modify dirs in-place to avoid hidden, audit workspace, dependency/vendor, and build/generated folders
         exclude_set = {
             "node_modules", "venv", ".venv", "env", "vendor", "third_party", "3rdparty",
@@ -29,6 +34,8 @@ def shard_repository(repo_path: str, profile: RepoProfile, workspace_dir: str = 
             and "audit_workspace" not in d 
             and d.lower() not in exclude_set
             and (not abs_workspace or os.path.abspath(os.path.join(root, d)) != abs_workspace)
+            and not os.path.exists(os.path.join(root, d, "audit_plan.json"))
+            and not os.path.exists(os.path.join(root, d, "run_manifest.json"))
         ]
             
         for file in files:
@@ -90,4 +97,5 @@ def shard_repository(repo_path: str, profile: RepoProfile, workspace_dir: str = 
                 status="discovered"
             ))
             
+    shards.sort(key=lambda s: s.shard_id)
     return shards

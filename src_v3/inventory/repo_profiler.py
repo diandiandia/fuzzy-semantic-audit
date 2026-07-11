@@ -63,16 +63,26 @@ def scan_repository(repo_path: str, workspace_dir: str = "") -> RepoProfile:
 
     # Walk the repository
     for root, dirs, files in os.walk(repo_path):
+        abs_root = os.path.abspath(root)
+        if abs_workspace and (abs_root == abs_workspace or abs_root.startswith(abs_workspace + os.sep)):
+            dirs[:] = []
+            continue
+
         # Determine roles for ALL subdirectories before filtering them out
         for d in dirs:
             d_abs_path = os.path.abspath(os.path.join(root, d))
+            d_rel_path = os.path.relpath(d_abs_path, repo_path)
+            
+            is_workspace = False
             if abs_workspace and d_abs_path == abs_workspace:
-                # Explicitly class workspace directory as workspace_artifact role
-                d_rel_path = os.path.relpath(d_abs_path, repo_path)
+                is_workspace = True
+            elif os.path.exists(os.path.join(d_abs_path, "audit_plan.json")) or os.path.exists(os.path.join(d_abs_path, "run_manifest.json")):
+                is_workspace = True
+                
+            if is_workspace:
                 directory_roles[d_rel_path] = "workspace_artifact"
                 continue
                 
-            d_rel_path = os.path.relpath(os.path.join(root, d), repo_path)
             role = None
             d_lower = d.lower()
             if d_lower in {"vendor", "node_modules", "venv", ".venv", "env", "third_party", "3rdparty"}:
@@ -99,6 +109,8 @@ def scan_repository(repo_path: str, workspace_dir: str = "") -> RepoProfile:
             and "audit_workspace" not in d 
             and d.lower() not in exclude_set
             and (not abs_workspace or os.path.abspath(os.path.join(root, d)) != abs_workspace)
+            and not os.path.exists(os.path.join(root, d, "audit_plan.json"))
+            and not os.path.exists(os.path.join(root, d, "run_manifest.json"))
         ]
         
         # Calculate relative path

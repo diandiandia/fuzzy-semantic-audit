@@ -1,5 +1,6 @@
 import os
 import re
+import json
 from typing import List, Dict, Any, Optional
 from src_v3.providers.semantic.base import SemanticProvider
 from src_v3.core.enums import CapabilityLevel
@@ -10,17 +11,166 @@ class LSIFProvider(SemanticProvider):
 
     def __init__(self, lsif_path: str = "", repo_path: str = "", ir_store: Optional[IRStore] = None):
         self.lsif_path = lsif_path
-        self.is_loaded = os.path.exists(lsif_path) and os.path.isfile(lsif_path) if lsif_path else False
         self.repo_path = os.path.abspath(repo_path) if repo_path else ""
         self.ir_store = ir_store
+        self.use_fallback = not bool(lsif_path) or not os.path.exists(lsif_path)
+        
+        # Parsed LSIF index maps
+        self.ranges: Dict[int, Dict[str, Any]] = {}
+        self.documents: Dict[int, str] = {}
+        self.definitions: Dict[int, List[Dict[str, Any]]] = {}
+        self.references: Dict[int, List[Dict[str, Any]]] = {}
+        
+        if not self.use_fallback:
+            try:
+                self._parse_lsif()
+                self.use_fallback = False
+            except Exception:
+                self.use_fallback = True
+
+    def _parse_lsif(self):
+        """
+        Parses the LSIF JSONL file to construct symbol mapping.
+        """
+        id_to_label: Dict[int, str] = {}
+        id_to_obj: Dict[int, Dict[str, Any]] = {}
+        
+        # Temp relations
+        next_map: Dict[int, int] = {} # outV -> inV
+        def_result_map: Dict[int, int] = {} # resultSet -> definitionResult
+        ref_result_map: Dict[int, int] = {} # resultSet -> referenceResult
+        item_map: Dict[int, List[Dict[str, Any]]] = {} # resultId -> list of range objects
+        
+        with open(self.lsif_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                obj = json.loads(line)
+                obj_id = obj.get("id")
+                obj_type = obj.get("type")
+                label = obj.get("label")
+                
+                id_to_obj[obj_id] = obj
+                id_to_label[obj_id] = label
+                
+                if obj_type == "vertex":
+                    if label == "document":
+                        uri = obj.get("uri", "")
+                        # Relativize URI
+                        if uri.startswith("file://"):
+                            uri = uri[7:]
+                        if self.repo_path and uri.startswith(self.repo_path):
+                            uri = os.path.relpath(uri, self.repo_path)
+                        self.documents[obj_id] = uri
+                    elif label == "range":
+                        self.ranges[obj_id] = obj
+                elif obj_type == "edge":
+                    out_v = obj.get("outV")
+                    in_vs = obj.get("inVs", [])
+                    in_v = obj.get("inV")
+                    
+                    if label == "contains":
+                        if out_v in self.documents:
+                            for inv in in_vs:
+                                if inv in self.ranges:
+                                    self.ranges[inv]["document"] = self.documents[out_v]
+                    elif label == "next":
+                        for inv in in_vs:
+                            next_map[out_v] = inv
+                    elif label == "textDocument/definition":
+                        for inv in in_vs:
+                            def_result_map[out_v] = inv
+                    elif label == "textDocument/references":
+                        for inv in in_vs:
+                            ref_result_map[out_v] = inv
+                    elif label == "item":
+                        for inv in in_vs:
+                            if out_v not in item_map:
+                                item_map[out_v] = []
+                            item_map[out_v].append({
+                                "range_id": inv,
+                                "document_id": obj.get("document")
+                            })
+
+        # Resolve definitions/references for each range
+        for r_id, range_obj in self.ranges.items():
+            result_set_id = next_map.get(r_id)
+            if not result_set_id:
+                continue
+                
+            # Definitions
+            def_res_id = def_result_map.get(result_set_id)
+            if def_res_id and def_res_id in item_map:
+                self.definitions[r_id] = []
+                for item in item_map[def_res_id]:
+                    target_range = self.ranges.get(item["range_id"])
+                    if target_range:
+                        self.definitions[r_id].append({
+                            "file": target_range.get("document", ""),
+                            "span": {
+                                "start": target_range["start"]["line"] + 1,
+                                "end": target_range["end"]["line"] + 1
+                            }
+                        })
+            
+            # References
+            ref_res_id = ref_result_map.get(result_set_id)
+            if ref_res_id and ref_res_id in item_map:
+                self.references[r_id] = []
+                for item in item_map[ref_res_id]:
+                    target_range = self.ranges.get(item["range_id"])
+                    if target_range:
+                        self.references[r_id].append({
+                            "file": target_range.get("document", ""),
+                            "span": {
+                                "start": target_range["start"]["line"] + 1,
+                                "end": target_range["end"]["line"] + 1
+                            }
+                        })
 
     def capability_level(self) -> str:
-        return CapabilityLevel.L2
+        return CapabilityLevel.L2.value
 
     def resolution_confidence(self) -> float:
-        return 0.6 if self.lsif_path else 0.0
+        if self.use_fallback:
+            return 0.0
+        return 0.8
+
+    def _find_matching_range_id(self, symbol_ref: Dict[str, Any]) -> Optional[int]:
+        """
+        Finds the LSIF range ID matching the symbol name, file, and span.
+        """
+        sym_name = symbol_ref.get("symbol")
+        file_path = symbol_ref.get("file")
+        span = symbol_ref.get("span", {})
+        
+        if not sym_name or not file_path:
+            return None
+            
+        for r_id, r_obj in self.ranges.items():
+            if r_obj.get("document") == file_path:
+                # Approximate span overlap or text match
+                r_line = r_obj["start"]["line"] + 1
+                if span.get("start") <= r_line <= span.get("end"):
+                    return r_id
+        return None
 
     def find_definitions(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not self.use_fallback:
+            r_id = self._find_matching_range_id(symbol_ref)
+            if r_id and r_id in self.definitions:
+                return [
+                    {
+                        "symbol": symbol_ref.get("symbol"),
+                        "file": d["file"],
+                        "span": d["span"],
+                        "kind": "definition"
+                    }
+                    for d in self.definitions[r_id]
+                ]
+            return []
+            
+        # Fallback Mode
         if not self.ir_store:
             return []
         sym_name = symbol_ref.get("symbol")
@@ -39,6 +189,21 @@ class LSIFProvider(SemanticProvider):
         return defs
 
     def find_references(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not self.use_fallback:
+            r_id = self._find_matching_range_id(symbol_ref)
+            if r_id and r_id in self.references:
+                return [
+                    {
+                        "symbol": symbol_ref.get("symbol"),
+                        "file": r["file"],
+                        "span": r["span"],
+                        "kind": "reference"
+                    }
+                    for r in self.references[r_id]
+                ]
+            return []
+
+        # Fallback Mode
         if not self.ir_store or not self.repo_path:
             return []
         sym_name = symbol_ref.get("symbol")

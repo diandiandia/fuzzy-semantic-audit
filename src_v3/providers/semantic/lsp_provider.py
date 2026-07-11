@@ -1,5 +1,6 @@
 import os
 import re
+import socket
 from typing import List, Dict, Any, Optional
 from src_v3.providers.semantic.base import SemanticProvider
 from src_v3.core.enums import CapabilityLevel
@@ -12,12 +13,30 @@ class LSPProvider(SemanticProvider):
         self.lsp_server_addr = lsp_server_addr
         self.repo_path = os.path.abspath(repo_path) if repo_path else ""
         self.ir_store = ir_store
+        self.use_fallback = not bool(lsp_server_addr)
+        
+        # Test connection if address is provided
+        if lsp_server_addr:
+            try:
+                # Expect host:port or similar
+                if ":" in lsp_server_addr:
+                    host, port = lsp_server_addr.split(":")
+                    s = socket.create_connection((host, int(port)), timeout=0.5)
+                    s.close()
+                    self.use_fallback = False
+                else:
+                    # Non-standard address, assume unreachable
+                    self.use_fallback = True
+            except Exception:
+                self.use_fallback = True
 
     def capability_level(self) -> str:
-        return CapabilityLevel.L3
+        return CapabilityLevel.L3.value
 
     def resolution_confidence(self) -> float:
-        return 0.6 if self.lsp_server_addr else 0.0
+        if self.use_fallback:
+            return 0.0
+        return 0.8
 
     def find_definitions(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not self.ir_store:
