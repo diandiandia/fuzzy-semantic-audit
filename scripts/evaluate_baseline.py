@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import hashlib
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
@@ -129,6 +130,45 @@ def load_candidates(repo_dir: str) -> Tuple[List[Dict[str, Any]], List[Dict[str,
     return candidates, pruned_candidates
 
 
+def load_json(path: str) -> Dict[str, Any]:
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def stable_report_digest(path: str) -> str:
+    if not os.path.exists(path):
+        return ""
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for line in f:
+            if b"wall_clock_seconds" in line or b"Generated at" in line:
+                continue
+            digest.update(line)
+    return digest.hexdigest()
+
+
+def load_baseline_observability(repo_dir: str) -> Dict[str, Any]:
+    workspace_dir = os.path.join(repo_dir, ".audit_workspace_v3")
+    plan = load_json(os.path.join(workspace_dir, "audit_plan.json"))
+    shards = plan.get("language_shards", [])
+    degraded = [
+        shard for shard in shards
+        if shard.get("status") in ["indexed_fallback", "recalled_fallback", "failed"]
+    ]
+    coverage_report = os.path.join(workspace_dir, "reports", "coverage_report.md")
+    coverage_text = ""
+    if os.path.exists(coverage_report):
+        with open(coverage_report, "r", encoding="utf-8") as f:
+            coverage_text = f.read()
+    return {
+        "fallback_ratio": len(degraded) / max(1, len(shards)),
+        "coverage_report_digest": stable_report_digest(coverage_report),
+        "coverage_report_text": coverage_text,
+    }
+
+
 def evaluate_case(case_file: str, repo_dir: str) -> Dict[str, Any]:
     case_data = load_yaml(case_file)
     ok, message = run_pipeline(repo_dir)
@@ -145,12 +185,16 @@ def evaluate_case(case_file: str, repo_dir: str) -> Dict[str, Any]:
         }
 
     candidates, pruned_candidates = load_candidates(repo_dir)
+    observability = load_baseline_observability(repo_dir)
     expected = case_data.get("expected", {})
     must_retrieve = expected.get("must_retrieve", [])
     top_k = int(expected.get("should_rank_top_k", 20))
     metrics = case_data.get("metrics", {})
     min_recall = float(metrics.get("min_recall_at_20", 0.0))
     max_after_prune = int(metrics.get("max_candidates_after_prune", 10**9))
+    max_fallback_ratio = metrics.get("max_fallback_ratio")
+    min_candidate_total = metrics.get("min_candidate_total")
+    report_must_contain = metrics.get("report_must_contain", [])
 
     candidates.sort(key=lambda x: x.get("priority_score", 0.0), reverse=True)
     top_candidates = candidates[:top_k]
@@ -175,6 +219,13 @@ def evaluate_case(case_file: str, repo_dir: str) -> Dict[str, Any]:
         failures.append(f"Recall {recall_at_20:.2f} below required minimum {min_recall:.2f}")
     if len(pruned_candidates) > max_after_prune:
         failures.append(f"Pruned candidates {len(pruned_candidates)} exceeds maximum {max_after_prune}")
+    if max_fallback_ratio is not None and observability["fallback_ratio"] > float(max_fallback_ratio):
+        failures.append(f"Fallback ratio {observability['fallback_ratio']:.2f} exceeds maximum {float(max_fallback_ratio):.2f}")
+    if min_candidate_total is not None and len(candidates) < int(min_candidate_total):
+        failures.append(f"Candidate total {len(candidates)} below minimum {int(min_candidate_total)}")
+    for needle in report_must_contain:
+        if needle not in observability["coverage_report_text"]:
+            failures.append(f"Coverage report missing required content: {needle}")
 
     passed = 1 if not failures else 0
     return {
@@ -183,6 +234,9 @@ def evaluate_case(case_file: str, repo_dir: str) -> Dict[str, Any]:
         "passed": passed,
         "failed": 1 - passed,
         "recall_at_20": recall_at_20,
+        "candidate_total": len(candidates),
+        "fallback_ratio": observability["fallback_ratio"],
+        "coverage_report_digest": observability["coverage_report_digest"],
         "avg_candidates_before_prune": len(candidates),
         "avg_candidates_after_prune": len(pruned_candidates),
         "failures": failures,
@@ -196,6 +250,8 @@ def summarize(results: List[Dict[str, Any]], skipped: List[Dict[str, Any]], base
     recall_vals = [r.get("recall_at_20", 0.0) for r in results]
     before_vals = [r.get("avg_candidates_before_prune", 0) for r in results]
     after_vals = [r.get("avg_candidates_after_prune", 0) for r in results]
+    candidate_totals = [r.get("candidate_total", 0) for r in results]
+    fallback_ratios = [r.get("fallback_ratio", 0.0) for r in results]
     failures = []
     for r in results:
         for failure in r.get("failures", []):
@@ -208,6 +264,8 @@ def summarize(results: List[Dict[str, Any]], skipped: List[Dict[str, Any]], base
         "failed": failed,
         "skipped": len(skipped),
         "recall_at_20": sum(recall_vals) / len(recall_vals) if recall_vals else 0.0,
+        "candidate_total": sum(candidate_totals),
+        "fallback_ratio": sum(fallback_ratios) / len(fallback_ratios) if fallback_ratios else 0.0,
         "avg_candidates_before_prune": sum(before_vals) / len(before_vals) if before_vals else 0.0,
         "avg_candidates_after_prune": sum(after_vals) / len(after_vals) if after_vals else 0.0,
         "failures": failures,

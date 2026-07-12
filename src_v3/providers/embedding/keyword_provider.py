@@ -6,6 +6,8 @@ from src_v3.providers.embedding.base import EmbeddingProvider
 
 class KeywordFallbackProvider(EmbeddingProvider):
     provider_name: str = "KeywordFallbackProvider"
+    model_name: str = "jaccard-lexical"
+    provider_version_string: str = "1.0.0"
 
     def _tokenize(self, text: str) -> Set:
         """

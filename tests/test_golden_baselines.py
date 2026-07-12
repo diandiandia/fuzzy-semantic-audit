@@ -29,6 +29,9 @@ class TestGoldenBaselines(unittest.TestCase):
         self.assertEqual(output.get("passed"), 1)
         self.assertEqual(output.get("failed"), 0)
         self.assertGreaterEqual(output.get("recall_at_20"), 0.8)
+        self.assertGreaterEqual(output.get("candidate_total"), 2)
+        self.assertIn("fallback_ratio", output)
+        self.assertIn("coverage_report_digest", output["results"][0])
         self.assertLessEqual(output.get("avg_candidates_after_prune"), 50)
         self.assertEqual(len(output.get("failures", [])), 0)
 

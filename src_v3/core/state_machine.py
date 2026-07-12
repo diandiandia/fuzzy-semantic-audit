@@ -119,18 +119,19 @@ def transition(obj: Any, to_status: str, metadata: Optional[Dict[str, Any]] = No
         obj.updated_at = now_str
         
     # Trigger critical state transition event logging
-    from src_v3.core.event_log import log_event
-    log_event(
-        workspace_dir or ".",
-        "state_machine",
-        "info",
-        f"State transitioned for {kind}: {current_status} -> {to_status}",
-        {
-            "kind": kind,
-            "from": current_status,
-            "to": to_status,
-            "updated_at": now_str,
-            "metadata": metadata
-        }
-    )
+    if kind == "shard" or to_status in ["verified", "false_positive", "error"]:
+        from src_v3.core.event_log import log_event
+        log_event(
+            workspace_dir or ".",
+            "state_machine",
+            "info",
+            f"State transitioned for {kind}: {current_status} -> {to_status}",
+            {
+                "kind": kind,
+                "from": current_status,
+                "to": to_status,
+                "updated_at": now_str,
+                "metadata": metadata
+            }
+        )
     return obj

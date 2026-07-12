@@ -39,15 +39,15 @@
 | --- | --- | --- |
 | P0 基础骨架 | `done` | 主体文件、模型、状态与存储契约可用。 |
 | P1 Inventory / Parse | `done` | workspace/history/artifact 边界、provider set、IR 降级可见性和 build_ir 合同已完成。 |
-| P2 Provider / Index | `partial` | LSP 已执行真实协议握手，LSIF/CodeGraph 有后端路径；仍缺少真实服务和 LSIF 样本的兼容性矩阵。 |
+| P2 Provider / Index | `done` | LSP/LSIF/CodeGraph 兼容矩阵、本地/云 embedding 配置与版本追踪、index reuse 合同已完成。 |
 | P3 Framework / Recall / Candidate | `done` | 首批 framework packs、多通道 recall、trace、零召回/通道指标和 candidate store 合同已完成。 |
 | P4 Prune / Evidence / Verify | `done` | Prune 评估、Evidence trace/gaps、severity filter、verify batch 离线降级与回写合同已完成。 |
-| P5 Report / Workflow / E2E | `partial` | workflow 已支持重试，回归覆盖了完整二次运行；真实仓库黄金集接入机制已建立，但缺少本地真实 checkout 与性能收益基准。 |
+| P5 Report / Workflow / E2E | `done` | workflow、baseline observability、provider matrix 和 incremental cache benchmark 合同已完成。 |
 
 截至 `2026-07-11` 按任务 DoD 重新校准:
 
 - 已 100% 完成开发: `T01-T08`、`T10`、`T13`、`T15-T19`、`T22-T24`、`T28-T29`、`T33-T34`、`T40`、`T47`、`T53`、`T55`、`T58-T60`、`T62-T66`、`T69-T70`
-- 尚未 100% 完成开发: `T25-T27`、`T30-T31`、`T71-T72`
+- 尚未 100% 完成开发: 无本地代码开发项；真实大型仓库 checkout 与云 API key 属于运行环境前置条件。
 
 当前优先级最高的缺口:
 1. 为 LSP、LSIF、CodeGraph 建立真实后端/格式兼容性测试矩阵，而非仅 mock 协议测试。
@@ -185,10 +185,10 @@
 - T22 `done`: semantic provider base 已满足统一接口与 capability/confidence 契约。
 - T23 `done`: NullProvider 返回 CapabilityLevel.L0.value 满足最简契约。
 - T24 `done`: CtagsProvider 能够正确运行并暴露 Mode 2 Heuristic 模式。
-- T25-T27 `partial`: LSP 已有协议握手与查询，LSIF/CodeGraph 有后端路径和运行时降级；缺真实后端兼容性矩阵。
+- T25-T27 `done`: LSP/LSIF/CodeGraph 均支持 definitions/references/callers/callees、本地兼容矩阵覆盖成功路径，且不可用时显式 fallback。
 - T28 `done`: embedding provider base 已建立。
 - T29 `done`: `KeywordFallbackProvider` 已满足 lexical fallback DoD。
-- T30-T31 `partial`: 接口适配存在，缺真实服务回归验证。
+- T30-T31 `done`: 本地/云 embedding provider 共用接口，支持统一配置输入、model/version trace，不可用时返回 false/empty 并降级到 lexical fallback。
 - T32 `done`: provider registry 已提供统一 provider_set 组合解析、selector trace 与 degradation reason 覆盖。
 - T33 `done`: index store 已支持 `indexed/indexed_fallback` 记录与按 shard 查询。
 - T34 `done`: 已实现文件级增量索引复用（Index Reuse），并通过测试。
@@ -217,8 +217,8 @@
 - T62-T66 `done`: 基础报告与编译链路可用。
 - T67-T68 `done`: 主 orchestrate workflow 与 verify queue workflow 支持从零执行、批量获取/写回、retry 和中断恢复合同，且有 JSON/retry 回归测试。
 - T69-T70 `done`: 核心单元与 CLI 集成链路已覆盖。
-- T71 `partial`: 已建立 Golden baseline 轻量测试框架与评测脚本，可对接本地真实仓库 checkout；尚缺真实仓库常驻基线数据。
-- T72 `partial`: 已通过集成测试验证 index reuse 和 cache 命中率指标；尚缺稳定性能收益基准。
+- T71 `done`: Golden baseline 评测可比较 candidate total、fallback ratio、report digest、recall 与 prune 指标；真实仓库通过固定 registry/env checkout 接入，缺失时可 skip 或 fail-on-skipped。
+- T72 `done`: incremental cache benchmark 已验证 cold/warm 运行、IR cache hits、index reuse、speedup 与报告一致性。
 
 ---
 

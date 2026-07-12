@@ -5,9 +5,11 @@ from src_v3.providers.embedding.base import EmbeddingProvider, cosine_similarity
 
 class CohereProvider(EmbeddingProvider):
     provider_name: str = "CohereProvider"
+    provider_version_string: str = "cohere-python"
 
-    def __init__(self, api_key: str = ""):
+    def __init__(self, api_key: str = "", model: str = "embed-english-v3.0"):
         self.api_key = api_key
+        self.model_name = model
         self.client = None
         if api_key:
             try:
@@ -33,7 +35,7 @@ class CohereProvider(EmbeddingProvider):
                 
                 response = self.client.embed(
                     texts=texts,
-                    model="embed-english-v3.0",
+                    model=self.model_name,
                     input_type="search_document"
                 )
                 
@@ -63,7 +65,7 @@ class CohereProvider(EmbeddingProvider):
         try:
             response = self.client.embed(
                 texts=[query],
-                model="embed-english-v3.0",
+                model=self.model_name,
                 input_type="search_query"
             )
             query_embedding = response.embeddings[0]

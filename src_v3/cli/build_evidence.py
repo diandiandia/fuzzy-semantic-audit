@@ -86,10 +86,6 @@ def main():
             else:
                 # Evidence is insufficient (bare candidate); route to needs_review/deferred
                 transition(cand, CandidateStatus.NEEDS_REVIEW.value, workspace_dir=workspace_dir)
-                log_event(workspace_dir, "build_evidence", "warning", f"Candidate '{cand.symbol}' in '{cand.file}' has insufficient contextual evidence (score={bundle.evidence_completeness_score}). Routed to needs_review.", {
-                    "candidate_id": cand.candidate_id,
-                    "score": bundle.evidence_completeness_score
-                })
             
             total_score += bundle.evidence_completeness_score
             

@@ -15,3 +15,8 @@ expected:
 metrics:
   min_recall_at_20: 0.8
   max_candidates_after_prune: 50
+  min_candidate_total: 2
+  max_fallback_ratio: 1.0
+  report_must_contain:
+    - Raw Recalled Candidates
+    - Language Shards Mapping

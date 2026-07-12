@@ -5,9 +5,11 @@ from src_v3.providers.embedding.base import EmbeddingProvider, cosine_similarity
 
 class OpenAIProvider(EmbeddingProvider):
     provider_name: str = "OpenAIProvider"
+    provider_version_string: str = "openai-python"
 
-    def __init__(self, api_key: str = ""):
+    def __init__(self, api_key: str = "", model: str = "text-embedding-3-small"):
         self.api_key = api_key
+        self.model_name = model
         self.client = None
         if api_key:
             try:
@@ -33,7 +35,7 @@ class OpenAIProvider(EmbeddingProvider):
                 
                 response = self.client.embeddings.create(
                     input=texts,
-                    model="text-embedding-3-small"
+                    model=self.model_name
                 )
                 
                 for idx, item in enumerate(response.data):
@@ -63,7 +65,7 @@ class OpenAIProvider(EmbeddingProvider):
             # Get query embedding
             response = self.client.embeddings.create(
                 input=[query],
-                model="text-embedding-3-small"
+                model=self.model_name
             )
             query_embedding = response.data[0].embedding
             

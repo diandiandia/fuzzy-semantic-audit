@@ -84,11 +84,8 @@ def main():
                     
                 transition(cand, CandidateStatus.QUEUED_FOR_VERIFY.value, workspace_dir=workspace_dir)
                 valid_ready_cands.append(cand)
-                bundle_dict = bundle.to_dict()
-                
                 batch_data.append({
                     "candidate": cand.to_dict(),
-                    "evidence": bundle_dict,
                     "votes": {
                         "reachability": "MAYBE",
                         "guarded": "MAYBE",

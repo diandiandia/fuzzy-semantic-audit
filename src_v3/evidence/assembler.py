@@ -82,10 +82,12 @@ def assemble_evidence(
     # Caller/Callee maps
     caller_map = ir_store.get_caller_map()
     callee_map = ir_store.get_callee_map()
-    call_edge_trace = {}
-    for edge in ir_store.iter_edges():
-        if edge.kind == "call":
-            call_edge_trace[(edge.src_node_id, edge.dst_node_id)] = edge.provider_trace
+    if not hasattr(ir_store, "_call_edge_trace_cache"):
+        ir_store._call_edge_trace_cache = {}
+        for edge in ir_store.iter_edges():
+            if edge.kind == "call":
+                ir_store._call_edge_trace_cache[(edge.src_node_id, edge.dst_node_id)] = edge.provider_trace
+    call_edge_trace = ir_store._call_edge_trace_cache
             
     # Gather immediate callers
     caller_chain = []

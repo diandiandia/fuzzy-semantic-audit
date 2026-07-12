@@ -5,13 +5,15 @@ from src_v3.providers.embedding.base import EmbeddingProvider, cosine_similarity
 
 class FastEmbedProvider(EmbeddingProvider):
     provider_name: str = "FastEmbedProvider"
+    provider_version_string: str = "fastembed"
 
-    def __init__(self):
+    def __init__(self, model: str = ""):
         self.available = False
+        self.model_name = model or "default"
         self.model = None
         try:
             from fastembed import TextEmbedding
-            self.model = TextEmbedding()
+            self.model = TextEmbedding(model_name=model) if model else TextEmbedding()
             self.available = True
         except ImportError:
             self.available = False

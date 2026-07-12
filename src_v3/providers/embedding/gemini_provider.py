@@ -5,9 +5,11 @@ from src_v3.providers.embedding.base import EmbeddingProvider, cosine_similarity
 
 class GeminiProvider(EmbeddingProvider):
     provider_name: str = "GeminiProvider"
+    provider_version_string: str = "google-generativeai"
 
-    def __init__(self, api_key: str = ""):
+    def __init__(self, api_key: str = "", model: str = "models/embedding-001"):
         self.api_key = api_key
+        self.model_name = model
         self.configured = False
         if api_key:
             try:
@@ -34,7 +36,7 @@ class GeminiProvider(EmbeddingProvider):
                 texts = [r.get("text", "") for r in batch]
                 
                 response = genai.embed_content(
-                    model="models/embedding-001",
+                    model=self.model_name,
                     content=texts,
                     task_type="retrieval_document"
                 )
@@ -67,7 +69,7 @@ class GeminiProvider(EmbeddingProvider):
         try:
             import google.generativeai as genai
             response = genai.embed_content(
-                model="models/embedding-001",
+                model=self.model_name,
                 content=query,
                 task_type="retrieval_query"
             )

@@ -16,6 +16,18 @@ class EmbeddingProvider:
     Base class / interface for building vector or lexical indices and searching them.
     """
     provider_name: str = "BaseEmbeddingProvider"
+    model_name: str = ""
+    provider_version_string: str = "unknown"
+
+    def provider_version(self) -> str:
+        return self.provider_version_string
+
+    def config_metadata(self) -> Dict[str, Any]:
+        return {
+            "provider_name": self.provider_name,
+            "model": self.model_name,
+            "version": self.provider_version()
+        }
 
     def build_index(self, records: List[Dict[str, Any]], out_dir: str) -> bool:
         """

@@ -83,22 +83,23 @@ def resolve_embedding(config: Dict[str, Any]) -> EmbeddingProvider:
     Selects embedding provider based on configuration:
     OpenAI / Gemini / Cohere / FastEmbed -> KeywordFallback
     """
-    pref = config.get("embedding_preference")
+    embedding_config = config.get("embedding", {})
+    pref = embedding_config.get("provider") or config.get("embedding_preference")
     
     if pref == "openai":
-        api_key = config.get("openai_api_key")
+        api_key = embedding_config.get("api_key") or config.get("openai_api_key")
         if api_key:
-            return OpenAIProvider(api_key)
+            return OpenAIProvider(api_key, model=embedding_config.get("model", "text-embedding-3-small"))
     elif pref == "gemini":
-        api_key = config.get("gemini_api_key")
+        api_key = embedding_config.get("api_key") or config.get("gemini_api_key")
         if api_key:
-            return GeminiProvider(api_key)
+            return GeminiProvider(api_key, model=embedding_config.get("model", "models/embedding-001"))
     elif pref == "cohere":
-        api_key = config.get("cohere_api_key")
+        api_key = embedding_config.get("api_key") or config.get("cohere_api_key")
         if api_key:
-            return CohereProvider(api_key)
+            return CohereProvider(api_key, model=embedding_config.get("model", "embed-english-v3.0"))
     elif pref == "fastembed":
-        provider = FastEmbedProvider()
+        provider = FastEmbedProvider(model=embedding_config.get("model", ""))
         if provider.available:
             return provider
             
@@ -191,7 +192,8 @@ def resolve_provider_set(
         "kind": "embedding",
         "selected": embedding.provider_name,
         "preference": config.get("embedding_preference", "keyword"),
-        "fallback": embedding.provider_name == "KeywordFallbackProvider"
+        "fallback": embedding.provider_name == "KeywordFallbackProvider",
+        "metadata": embedding.config_metadata()
     })
 
     framework_providers = resolve_frameworks(profile, shard.lang)

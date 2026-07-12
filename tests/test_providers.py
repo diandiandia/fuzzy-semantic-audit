@@ -36,6 +36,18 @@ class TestProviders(unittest.TestCase):
         # Missing keys/configs should fallback to KeywordFallbackProvider
         embedding = resolve_embedding({"embedding_preference": "openai"})
         self.assertEqual(embedding.provider_name, "KeywordFallbackProvider")
+        self.assertEqual(embedding.config_metadata()["model"], "jaccard-lexical")
+
+    def test_resolve_embedding_unified_config_tracks_model(self):
+        embedding = resolve_embedding({
+            "embedding": {
+                "provider": "openai",
+                "api_key": "test-key",
+                "model": "text-embedding-3-large"
+            }
+        })
+        self.assertEqual(embedding.provider_name, "OpenAIProvider")
+        self.assertEqual(embedding.config_metadata()["model"], "text-embedding-3-large")
 
     def test_versioned_semantic_packs_loading(self):
         # Python semantic pack should load with version 1.0.0
@@ -128,16 +140,19 @@ class TestProviders(unittest.TestCase):
         op = OpenAIProvider("")
         self.assertFalse(op.build_index([], ""))
         self.assertEqual(op.search("query", "", 5), [])
+        self.assertEqual(op.provider_version(), "openai-python")
 
     def test_gemini_embedding_provider_fallback(self):
         gp = GeminiProvider("")
         self.assertFalse(gp.build_index([], ""))
         self.assertEqual(gp.search("query", "", 5), [])
+        self.assertEqual(gp.config_metadata()["model"], "models/embedding-001")
 
     def test_cohere_embedding_provider_fallback(self):
         cp = CohereProvider("")
         self.assertFalse(cp.build_index([], ""))
         self.assertEqual(cp.search("query", "", 5), [])
+        self.assertEqual(cp.provider_version(), "cohere-python")
 
     def test_fastembed_embedding_provider_fallback(self):
         fp = FastEmbedProvider()
