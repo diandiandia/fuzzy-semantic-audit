@@ -4,14 +4,13 @@ import os
 import sys
 import datetime
 
-from src_v3.core.models import AuditPlan, RepoProfile, LanguageShard
+from src_v3.core.models import AuditPlan, RepoProfile
 from src_v3.core.plan_io import load_plan, save_plan
 from src_v3.core.event_log import log_event
 from src_v3.core.metrics import record_metric
 from src_v3.inventory.repo_profiler import scan_repository
 from src_v3.inventory.framework_detector import detect_frameworks
 from src_v3.inventory.language_sharder import shard_repository
-from src_v3.inventory.capability_resolver import resolve_shard_capability
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Build repository profile and split language shards")
@@ -52,28 +51,23 @@ def main():
         shards = shard_repository(repo_path, profile, workspace_dir)
         
         # 4. Resolve capability for each shard and assign provider set
-        from src_v3.core.provider_registry import resolve_parser, resolve_semantic, resolve_embedding
+        from src_v3.core.provider_registry import resolve_provider_set
         config = plan.summary.get("config", {})
         for shard in shards:
-            parser_prov = resolve_parser(shard.lang, config)
-            semantic_prov = resolve_semantic(shard.lang, config, repo_path, None)
-            embedding_prov = resolve_embedding(config)
-            
-            shard.provider_set = {
-                "parser": parser_prov.provider_name,
-                "semantic": semantic_prov.provider_name,
-                "embedding": embedding_prov.provider_name,
-                "framework": "GenericFrameworkProvider",
-                "frameworks": ["GenericFrameworkProvider"]
-            }
-            # Resolve framework providers using the provider registry
-            from src_v3.core.provider_registry import resolve_frameworks
-            fw_provs = resolve_frameworks(profile, shard.lang)
-            if fw_provs:
-                framework_names = [fw.framework_name for fw in fw_provs]
-                shard.provider_set["framework"] = framework_names[0]
-                shard.provider_set["frameworks"] = framework_names
-                
+            degradation_reasons = []
+            shard.provider_set = resolve_provider_set(
+                profile,
+                shard,
+                config,
+                repo_path=repo_path,
+                ir_store=None,
+                degradation_list=degradation_reasons
+            )
+            if degradation_reasons and plan.run_manifest:
+                for reason in degradation_reasons:
+                    if reason not in plan.run_manifest.degradation_reasons:
+                        plan.run_manifest.degradation_reasons.append(reason)
+
             # Resolve capability (initialize to L0 as no parsing/indexing has run yet)
             from src_v3.core.enums import CapabilityLevel
             shard.capability = CapabilityLevel.L0.value

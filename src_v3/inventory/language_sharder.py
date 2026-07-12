@@ -1,7 +1,6 @@
 import os
-from typing import List, Dict, Set
+from typing import List, Dict
 from src_v3.core.models import LanguageShard, RepoProfile
-from src_v3.inventory.repo_profiler import EXT_TO_LANG
 
 from src_v3.core.boundary import WorkspaceBoundary
 
@@ -17,12 +16,9 @@ def shard_repository(repo_path: str, profile: RepoProfile, workspace_dir: str = 
     # Group file relative paths by (lang, top_level_dir)
     lang_dir_files: Dict[str, Dict[str, List[str]]] = {}
     
-    # Also keep track of unsupported language files so they aren't ignored
-    unsupported_files: List[str] = []
-    
     for root, dirs, files in os.walk(repo_path):
         abs_root = os.path.abspath(root)
-        if boundary.is_excluded(abs_root):
+        if boundary.is_repository_artifact_dir(abs_root):
             dirs[:] = []
             continue
 
@@ -30,11 +26,7 @@ def shard_repository(repo_path: str, profile: RepoProfile, workspace_dir: str = 
         dirs[:] = [
             d for d in dirs 
             if not d.startswith(".") 
-            and "audit_workspace" not in d 
-            and d.lower() not in WorkspaceBoundary.get_default_exclude_dirs()
-            and not boundary.is_excluded(os.path.join(root, d))
-            and not os.path.exists(os.path.join(root, d, "audit_plan.json"))
-            and not os.path.exists(os.path.join(root, d, "run_manifest.json"))
+            and not boundary.is_repository_artifact_dir(os.path.join(root, d))
         ]
             
         for file in files:

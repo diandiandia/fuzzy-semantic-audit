@@ -31,6 +31,9 @@ def recall_by_vector(
     
     # 1. Resolve embedding provider
     embedding_provider = resolve_embedding(config)
+    provider_trace = [embedding_provider.provider_name]
+    if embedding_provider.provider_name == "KeywordFallbackProvider":
+        provider_trace.append("embedding_fallback: lexical keyword search")
     
     # Locate index path
     index_type = "lexical" if embedding_provider.provider_name == "KeywordFallbackProvider" else "vector"
@@ -69,7 +72,7 @@ def recall_by_vector(
                 source_tracks=[track],
                 matched_rules=[f"vector.{track}.similarity_match"],
                 recall_sources=["vector"],
-                provider_trace=[embedding_provider.provider_name],
+                provider_trace=provider_trace,
                 priority_score=score * 100.0, # Scale Jaccard/cosine score to 100
                 candidate_capability=shard.capability,
                 status="discovered"

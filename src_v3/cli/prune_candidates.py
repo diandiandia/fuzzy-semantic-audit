@@ -52,7 +52,10 @@ def main():
                 "summary": {
                     "recalled_total": 0,
                     "pruned_total": 0,
+                    "dropped_total": 0,
                     "compression_ratio": 1.0,
+                    "compression_factor": 0,
+                    "threshold": args.threshold,
                     "wall_clock_seconds": time.time() - start_time
                 }
             }, ensure_ascii=False))
@@ -86,7 +89,10 @@ def main():
         
         record_metric(workspace_dir, "prune_candidates", "recalled_total", metrics["recalled_total"])
         record_metric(workspace_dir, "prune_candidates", "pruned_total", metrics["pruned_total"])
+        record_metric(workspace_dir, "prune_candidates", "dropped_total", metrics["dropped_total"])
         record_metric(workspace_dir, "prune_candidates", "compression_ratio", metrics["compression_ratio"])
+        record_metric(workspace_dir, "prune_candidates", "compression_factor", metrics["compression_factor"])
+        record_metric(workspace_dir, "prune_candidates", "threshold", metrics["threshold"])
         record_metric(workspace_dir, "prune_candidates", "wall_clock_seconds", duration)
         
         # Output JSON contract
@@ -97,7 +103,10 @@ def main():
             "summary": {
                 "recalled_total": metrics["recalled_total"],
                 "pruned_total": metrics["pruned_total"],
+                "dropped_total": metrics["dropped_total"],
                 "compression_ratio": metrics["compression_ratio"],
+                "compression_factor": metrics["compression_factor"],
+                "threshold": metrics["threshold"],
                 "wall_clock_seconds": duration
             }
         }, ensure_ascii=False))

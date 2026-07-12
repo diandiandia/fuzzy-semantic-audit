@@ -32,6 +32,33 @@ class WorkspaceBoundary:
         if abs_path == self.workspace_dir or abs_path.startswith(self.workspace_dir + os.sep):
             return True
         return False
+
+    @classmethod
+    def has_workspace_marker(cls, path: str) -> bool:
+        """
+        Detect historical audit workspaces even when they are not the currently
+        configured workspace directory.
+        """
+        return (
+            os.path.exists(os.path.join(path, "audit_plan.json"))
+            or os.path.exists(os.path.join(path, "run_manifest.json"))
+        )
+
+    def is_repository_artifact_dir(self, path: str) -> bool:
+        """
+        Returns True for the active workspace, historical audit workspaces, or
+        common generated/cache/vendor directories that must not enter source
+        inventory, sharding, or recall.
+        """
+        abs_path = os.path.abspath(path)
+        name = os.path.basename(abs_path).lower()
+        if self.is_excluded(abs_path):
+            return True
+        if self.has_workspace_marker(abs_path):
+            return True
+        if "audit_workspace" in name:
+            return True
+        return name in self.get_default_exclude_dirs()
         
     @staticmethod
     def get_default_exclude_dirs() -> Set[str]:
@@ -39,7 +66,10 @@ class WorkspaceBoundary:
         Returns standard system directory names to exclude.
         """
         return {
-            ".git", ".audit_workspace_v3", ".gemini", "node_modules", "venv", 
+            ".git", ".audit_workspace", ".audit_workspace_v2", ".audit_workspace_v3",
+            ".gemini", ".codex", ".agents", ".cache", ".pytest_cache", ".mypy_cache",
+            ".ruff_cache", ".tox", ".nox", "node_modules", "venv",
             ".venv", "env", "vendor", "third_party", "3rdparty",
-            "gen", "generated", "dist", "build", "target", "out", "__pycache__"
+            "gen", "generated", "dist", "build", "target", "out", "__pycache__",
+            "coverage", "htmlcov"
         }

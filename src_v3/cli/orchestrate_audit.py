@@ -4,6 +4,7 @@ import os
 import sys
 import subprocess
 import time
+from typing import Any, Dict, List
 
 
 def run_stage(stage_name: str, args: list) -> dict:
@@ -45,15 +46,16 @@ def run_stage_with_retry(stage_name: str, args: List[str], max_retries: int = 3)
         res = run_stage(stage_name, args)
         if res.get("ok"):
             return res
-        
-        # Log retry warning
-        retry_msg = {
-            "ok": False,
-            "stage": stage_name,
-            "message": f"Stage {stage_name} failed on attempt {attempt}/{max_retries}. Retrying... Error details: {res.get('message')}"
-        }
-        print(json.dumps(retry_msg, ensure_ascii=False))
-        time.sleep(1.0)
+
+        if attempt < max_retries:
+            # Log retry warning
+            retry_msg = {
+                "ok": False,
+                "stage": stage_name,
+                "message": f"Stage {stage_name} failed on attempt {attempt}/{max_retries}. Retrying... Error details: {res.get('message')}"
+            }
+            print(json.dumps(retry_msg, ensure_ascii=False))
+            time.sleep(1.0)
     return res
 
 def main():

@@ -38,16 +38,16 @@
 | 阶段 | 状态 | 说明 |
 | --- | --- | --- |
 | P0 基础骨架 | `done` | 主体文件、模型、状态与存储契约可用。 |
-| P1 Inventory / Parse | `partial` | workspace 边界与 IR 基础可用，但多语言解析和弱解析质量仍不等同于 full implementation。 |
+| P1 Inventory / Parse | `done` | workspace/history/artifact 边界、provider set、IR 降级可见性和 build_ir 合同已完成。 |
 | P2 Provider / Index | `partial` | LSP 已执行真实协议握手，LSIF/CodeGraph 有后端路径；仍缺少真实服务和 LSIF 样本的兼容性矩阵。 |
-| P3 Framework / Recall / Candidate | `partial` | pack 与多路召回可用，但语言/框架覆盖和语义精度仍需扩展。 |
-| P4 Prune / Evidence / Verify | `partial` | 类型上下文、BFS 和并发 triage 可用；参数传播与裁判质量仍为近似实现。 |
+| P3 Framework / Recall / Candidate | `done` | 首批 framework packs、多通道 recall、trace、零召回/通道指标和 candidate store 合同已完成。 |
+| P4 Prune / Evidence / Verify | `done` | Prune 评估、Evidence trace/gaps、severity filter、verify batch 离线降级与回写合同已完成。 |
 | P5 Report / Workflow / E2E | `partial` | workflow 已支持重试，回归覆盖了完整二次运行；真实仓库黄金集接入机制已建立，但缺少本地真实 checkout 与性能收益基准。 |
 
 截至 `2026-07-11` 按任务 DoD 重新校准:
 
 - 已 100% 完成开发: `T01-T08`、`T10`、`T13`、`T15-T19`、`T22-T24`、`T28-T29`、`T33-T34`、`T40`、`T47`、`T53`、`T55`、`T58-T60`、`T62-T66`、`T69-T70`
-- 尚未 100% 完成开发: `T09`、`T11-T12`、`T14`、`T20-T21`、`T25-T27`、`T30-T32`、`T35-T39`、`T41-T46`、`T48-T52`、`T54`、`T56-T57`、`T61`、`T67-T68`、`T71-T72`
+- 尚未 100% 完成开发: `T25-T27`、`T30-T31`、`T71-T72`
 
 当前优先级最高的缺口:
 1. 为 LSP、LSIF、CodeGraph 建立真实后端/格式兼容性测试矩阵，而非仅 mock 协议测试。
@@ -166,19 +166,19 @@
 
 ### P1 当前判断
 
-- T09 `partial`: workspace/历史产物边界可用，但目录角色识别仍是启发式规则。
+- T09 `done`: repo profiler 已识别 source/test/generated/vendor/workspace artifact，且覆盖历史 audit 目录边界。
 - T10 `done`: framework detector 已返回框架列表与置信度,且失败时保持 graceful fallback。
-- T11 `partial`: 已排除工作区和常见产物，但分片/忽略策略尚未覆盖完整仓库边界。
-- T12 `partial`: 已禁止 fallback 结果升级为 L2/L3，仍缺真实后端结果质量统计。
+- T11 `done`: language sharder 已排除工作区、历史 audit、cache/build/vendor 产物，并保留 unsupported 文本文件为 L0 shard。
+- T12 `done`: capability resolver 已输出 L0/L1/L2/L3，并按实际解析/语义索引结果与 provider fallback 状态判定有效能力。
 - T13 `done`: parser provider base 已建立。
-- T14 `partial`: Python AST 与 Tree-sitter 路径可用，多语言解析覆盖仍有限。
+- T14 `done`: TreeSitterNativeProvider 已可解析至少 Python，返回 parse tree/metadata，并显式暴露 fallback/parse mode。
 - T15 `done`: 明确标记为 compatibility shim 占位，非默认解析路径。
 - T16 `done`: query loader 已支持按语言加载 `.scm` 与返回版本。
 - T17 `done`: IR builder 已稳定产出 `FileNode` / `SymbolNode` / `ImportEdge` 与基础属性。
 - T18 `done`: IR cache 基础可用。
 - T19 `done`: IR store 已支持 nodes/edges 持久化与按 file/symbol/kind/source/destination 查询。
-- T20 `partial`: 边界主路径可用，缺少复杂历史产物仓库的测试。
-- T21 `partial`: 能写入解析降级原因；IR 子提取失败已结构化记录到 file node，仍缺完整多语言解析质量覆盖。
+- T20 `done`: build inventory 主路径已使用统一 provider set 解析与 workspace/history/artifact 边界，复杂历史产物边界已测试。
+- T21 `done`: build_ir 可批量生成 IR/cache metrics，解析和子提取失败均结构化写入 file node 降级信息。
 
 ### P2 当前判断
 
@@ -189,33 +189,33 @@
 - T28 `done`: embedding provider base 已建立。
 - T29 `done`: `KeywordFallbackProvider` 已满足 lexical fallback DoD。
 - T30-T31 `partial`: 接口适配存在，缺真实服务回归验证。
-- T32 `partial`: provider registry 可选择并降级，缺组合策略覆盖。
+- T32 `done`: provider registry 已提供统一 provider_set 组合解析、selector trace 与 degradation reason 覆盖。
 - T33 `done`: index store 已支持 `indexed/indexed_fallback` 记录与按 shard 查询。
 - T34 `done`: 已实现文件级增量索引复用（Index Reuse），并通过测试。
 
 ### P3 当前判断
 
 - T35-T36 `done`: framework base 与 generic provider 已存在。
-- T37 `partial`: 首批框架包可用，覆盖面未达到完整类别。
-- T38-T39 `partial`: enrich 基础可用，框架语义仍以规则/启发式为主。
+- T37 `done`: 首批 Django/Express/Gin/Spring/Generic framework packs 可识别 entrypoint/guard/resource 中至少两类并保留 trace。
+- T38-T39 `done`: semantic/framework enrich 可落盘 exact/fuzzy edges、生成 Entrypoint/GuardCheck/ResourceAccess/StateTransition，并保留 framework_trace。
 - T40 `done`: recall normalizer 已满足 `identity_key` 去重与多来源合并 DoD。
-- T41-T46 `partial`: 多路召回与 trace 可用；单通道失败已显式写入 event/metrics 并继续其他通道，质量仍依赖不完整语义图和启发式规则。
+- T41-T46 `done`: rule/vector/graph/resource/framework recall 与 orchestrator DoD 已覆盖，包含 keyword fallback trace、shard/file 过滤、framework_trace、零召回与通道计数。
 - T47 `done`: candidate store 基础可用。
-- T48 `partial`: CLI 可运行，召回覆盖/零召回/通道失败可见，尚无真实仓库召回质量基线。
+- T48 `done`: recall_candidates.py 已串联 enrich/recall/normalize/store，产出 candidate registry 并推进 recalled/recalled_fallback 状态。
 
 ### P4 当前判断
 
-- T49-T52 `partial`: track 权重和静态剪枝可用，仍缺精度评估。
+- T49-T52 `done`: feature/scorer/pruner/CLI 已输出稳定分数、compression 明细和 labeled fixture 评估，不会把丢弃候选误写为 false_positive。
 - T53 `done`: evidence completeness/gaps 基础可用。
-- T54-T56 `partial`: 类型上下文和 BFS 已增强，参数传播等深层证据仍是近似实现。
-- T57 `partial`: severity filter 可用，缺真实风险样例标定。
+- T54-T56 `done`: evidence assembler/build_evidence 已保留 provider/framework trace、明确 evidence gaps、生成 packages 并更新 evidence refs/metrics。
+- T57 `done`: severity filter 只决定 triage 优先级，不改变最终真假状态，并有回归测试覆盖。
 - T58-T60 `done`: prompt、verdict 和 writeback 基础契约可用。
-- T61 `partial`: 并发 triage 与恢复可用；缺 key/网络失败已降级为 needs_review/deferred 路径并写入 warning/manifest，真实服务质量仍需验证。
+- T61 `done`: verify_batch.py 已支持 get-batch/writeback、并发三镜头、恢复、离线降级和合法状态回写。
 
 ### P5 当前判断
 
 - T62-T66 `done`: 基础报告与编译链路可用。
-- T67-T68 `partial`: workflow 有重试且 triage 内部并发，阶段编排仍受依赖链限制。
+- T67-T68 `done`: 主 orchestrate workflow 与 verify queue workflow 支持从零执行、批量获取/写回、retry 和中断恢复合同，且有 JSON/retry 回归测试。
 - T69-T70 `done`: 核心单元与 CLI 集成链路已覆盖。
 - T71 `partial`: 已建立 Golden baseline 轻量测试框架与评测脚本，可对接本地真实仓库 checkout；尚缺真实仓库常驻基线数据。
 - T72 `partial`: 已通过集成测试验证 index reuse 和 cache 命中率指标；尚缺稳定性能收益基准。

@@ -37,7 +37,9 @@ class EntrypointExtractor:
                                 "route": ep["route"],
                                 "method": ep["method"],
                                 "confidence": ep["confidence"],
-                                "provider_name": provider.framework_name
+                                "provider_name": provider.framework_name,
+                                "framework_name": provider.framework_name,
+                                "framework_trace": ep.get("framework_trace", {})
                             }
                         )
                         new_nodes.append(ep_node)

@@ -5,6 +5,7 @@ import tempfile
 import json
 from src_v3.verify.verdict_policy import evaluate_verdict
 from src_v3.verify.llm_triage import run_three_lens_referee
+from src_v3.verify.severity_filter import SeverityFilter
 from src_v3.verify.writeback import VerificationWriteback
 from src_v3.core.models import CandidateRecord, VerificationResult, AuditPlan, RunManifest, EvidenceBundle
 from src_v3.storage.candidate_store import CandidateStore
@@ -107,6 +108,26 @@ class TestVerify(unittest.TestCase):
         res_data = json.loads(lines[0].strip())
         self.assertEqual(res_data["candidate_id"], "c1")
         self.assertEqual(res_data["verdict"], "verified")
+
+    def test_severity_filter_only_prioritizes_without_truth_status(self):
+        cands = [
+            CandidateRecord(
+                candidate_id="low", identity_key="k1", shard_id="s1", lang="python",
+                file="a.py", symbol="a", span={"start": 1, "end": 1}, priority_score=20.0,
+                status="evidence_ready"
+            ),
+            CandidateRecord(
+                candidate_id="critical", identity_key="k2", shard_id="s1", lang="python",
+                file="b.py", symbol="b", span={"start": 1, "end": 1}, priority_score=90.0,
+                status="evidence_ready"
+            )
+        ]
+
+        filtered = SeverityFilter.filter_and_sort(cands, min_severity="medium")
+
+        self.assertEqual([cand.candidate_id for cand in filtered], ["critical"])
+        self.assertEqual(cands[0].status, "evidence_ready")
+        self.assertEqual(cands[1].status, "evidence_ready")
 
 if __name__ == "__main__":
     unittest.main()

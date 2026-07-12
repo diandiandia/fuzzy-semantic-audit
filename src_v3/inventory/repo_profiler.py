@@ -65,7 +65,7 @@ def scan_repository(repo_path: str, workspace_dir: str = "") -> RepoProfile:
     # Walk the repository
     for root, dirs, files in os.walk(repo_path):
         abs_root = os.path.abspath(root)
-        if boundary.is_excluded(abs_root):
+        if boundary.is_repository_artifact_dir(abs_root):
             dirs[:] = []
             continue
 
@@ -74,7 +74,7 @@ def scan_repository(repo_path: str, workspace_dir: str = "") -> RepoProfile:
             d_abs_path = os.path.abspath(os.path.join(root, d))
             d_rel_path = os.path.relpath(d_abs_path, repo_path)
             
-            is_workspace = boundary.is_excluded(d_abs_path) or os.path.exists(os.path.join(d_abs_path, "audit_plan.json")) or os.path.exists(os.path.join(d_abs_path, "run_manifest.json"))
+            is_workspace = boundary.is_repository_artifact_dir(d_abs_path)
                 
             if is_workspace:
                 directory_roles[d_rel_path] = "workspace_artifact"
@@ -98,11 +98,7 @@ def scan_repository(repo_path: str, workspace_dir: str = "") -> RepoProfile:
         dirs[:] = [
             d for d in dirs 
             if not d.startswith(".") 
-            and "audit_workspace" not in d 
-            and d.lower() not in WorkspaceBoundary.get_default_exclude_dirs()
-            and not boundary.is_excluded(os.path.join(root, d))
-            and not os.path.exists(os.path.join(root, d, "audit_plan.json"))
-            and not os.path.exists(os.path.join(root, d, "run_manifest.json"))
+            and not boundary.is_repository_artifact_dir(os.path.join(root, d))
         ]
         
         # Calculate relative path

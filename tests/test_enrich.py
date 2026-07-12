@@ -2,9 +2,14 @@ import unittest
 import os
 import shutil
 import tempfile
-from src_v3.core.models import LanguageShard, IRNode, IREdge, SymbolNode, FileNode
+from src_v3.core.models import AuditPlan, LanguageShard, IRNode, IREdge, SymbolNode, FileNode
+from src_v3.core.plan_io import save_plan
 from src_v3.storage.ir_store import IRStore
 from src_v3.providers.framework.base import FrameworkProvider
+from src_v3.providers.framework.django import DjangoPack
+from src_v3.providers.framework.express import ExpressPack
+from src_v3.providers.framework.gin import GinPack
+from src_v3.providers.framework.spring import SpringPack
 from src_v3.providers.semantic.base import SemanticProvider
 from src_v3.enrich.framework_semantics import enrich_framework_semantics
 from src_v3.enrich.semantic_orchestrator import enrich_semantic_relations
@@ -192,6 +197,118 @@ class TestEnrich(unittest.TestCase):
         
         # Verify resolved import edge created
         self.assertIn("import_resolved", kinds)
+
+    def test_framework_provider_uses_source_context_for_route_and_trace(self):
+        root_dir = tempfile.mkdtemp()
+        try:
+            repo_dir = os.path.join(root_dir, "repo")
+            workspace_dir = os.path.join(root_dir, "workspace")
+            os.makedirs(repo_dir, exist_ok=True)
+            os.makedirs(workspace_dir, exist_ok=True)
+            with open(os.path.join(repo_dir, "routes.js"), "w", encoding="utf-8") as f:
+                f.write("router.post('/pay', requireAuth, pay)\nfunction pay(req, res) {\n  db.query('select 1')\n}\n")
+
+            save_plan(AuditPlan(
+                version="3",
+                repo_path=repo_dir,
+                workspace_dir=workspace_dir,
+                repo_profile_path="repo_profile.json"
+            ), os.path.join(workspace_dir, "audit_plan.json"))
+
+            ir_store = IRStore(workspace_dir)
+            file_node = FileNode(node_id="file_routes_js", kind="file", lang="javascript", file="routes.js")
+            sym_node = SymbolNode(
+                node_id="sym_routes_js_pay_2_4",
+                kind="symbol",
+                lang="javascript",
+                file="routes.js",
+                symbol="pay",
+                span={"start": 2, "end": 4},
+                attributes={}
+            )
+            ir_store.save([file_node, sym_node], [], overwrite=True)
+
+            shard = LanguageShard(shard_id="javascript-root", lang="javascript", paths=["routes.js"])
+            enrich_framework_semantics(workspace_dir, shard, [ExpressPack()])
+
+            enriched = IRStore(workspace_dir).get_node_by_id("sym_routes_js_pay_2_4")
+            entrypoint = enriched.attributes["framework_entrypoint"]
+            guard = enriched.attributes["framework_guard"]
+            resource = enriched.attributes["framework_resource"]
+
+            self.assertEqual(entrypoint["route"], "/pay")
+            self.assertEqual(entrypoint["method"], "POST")
+            self.assertEqual(entrypoint["framework_trace"]["framework"], "ExpressPack")
+            self.assertTrue(guard["framework_trace"]["details"]["matched_context"])
+            self.assertTrue(resource["framework_trace"]["details"]["matched_context"])
+        finally:
+            shutil.rmtree(root_dir)
+
+    def test_first_framework_packs_extract_multiple_semantic_categories(self):
+        cases = [
+            (
+                DjangoPack(),
+                "views.py",
+                "@login_required\ndef api_view(request):\n    return User.objects.filter(active=True)\n",
+                "api_view",
+                {"start": 2, "end": 3}
+            ),
+            (
+                GinPack(),
+                "handlers.go",
+                "r.GET('/orders', AuthMiddleware(), ListOrders)\nfunc ListOrders(c *gin.Context) {\n    db.Find(&orders)\n    c.JSON(200, orders)\n}\n",
+                "ListOrders",
+                {"start": 2, "end": 5}
+            ),
+            (
+                SpringPack(),
+                "OrderController.java",
+                "@GetMapping('/orders')\n@PreAuthorize(\"hasRole('ADMIN')\")\npublic List<Order> orders() {\n    return orderRepository.findAll();\n}\n",
+                "orders",
+                {"start": 3, "end": 5}
+            )
+        ]
+
+        for provider, rel_file, content, symbol, span in cases:
+            with self.subTest(provider=provider.framework_name):
+                root_dir = tempfile.mkdtemp()
+                try:
+                    repo_dir = os.path.join(root_dir, "repo")
+                    workspace_dir = os.path.join(root_dir, "workspace")
+                    os.makedirs(repo_dir, exist_ok=True)
+                    os.makedirs(workspace_dir, exist_ok=True)
+                    with open(os.path.join(repo_dir, rel_file), "w", encoding="utf-8") as f:
+                        f.write(content)
+                    save_plan(AuditPlan(
+                        version="3",
+                        repo_path=repo_dir,
+                        workspace_dir=workspace_dir,
+                        repo_profile_path="repo_profile.json"
+                    ), os.path.join(workspace_dir, "audit_plan.json"))
+
+                    ir_store = IRStore(workspace_dir)
+                    file_node = FileNode(node_id=f"file_{provider.framework_name}", kind="file", lang="mixed", file=rel_file)
+                    sym_node = SymbolNode(
+                        node_id=f"sym_{provider.framework_name}",
+                        kind="symbol",
+                        lang="mixed",
+                        file=rel_file,
+                        symbol=symbol,
+                        span=span,
+                        attributes={}
+                    )
+                    ir_store.save([file_node, sym_node], [], overwrite=True)
+
+                    entrypoints = provider.extract_entrypoints(ir_store)
+                    guards = provider.extract_guards(ir_store)
+                    resources = provider.extract_resources(ir_store)
+                    categories = sum(bool(items) for items in [entrypoints, guards, resources])
+
+                    self.assertGreaterEqual(categories, 2)
+                    if entrypoints:
+                        self.assertEqual(entrypoints[0]["framework_trace"]["framework"], provider.framework_name)
+                finally:
+                    shutil.rmtree(root_dir)
 
 if __name__ == "__main__":
     unittest.main()

@@ -144,6 +144,74 @@ def resolve_frameworks(profile: RepoProfile, lang: str) -> List[Any]:
         providers.append(GenericFrameworkProvider())
     return providers
 
+def resolve_provider_set(
+    profile: RepoProfile,
+    shard: Any,
+    config: Dict[str, Any],
+    repo_path: str = "",
+    ir_store: Any = None,
+    degradation_list: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Resolve all provider classes for a shard through one deterministic path.
+    The returned dict is serializable into LanguageShard.provider_set and keeps
+    a selector trace so later stages can explain why fallback providers were
+    selected.
+    """
+    trace: List[Dict[str, Any]] = []
+
+    parser = resolve_parser(shard.lang, config)
+    trace.append({
+        "kind": "parser",
+        "selected": parser.provider_name,
+        "preference": config.get("parser_preference", "native"),
+        "fallback": bool(getattr(parser, "is_fallback_for_lang", lambda _lang: False)(shard.lang))
+    })
+
+    semantic_degradations: List[str] = []
+    semantic = resolve_semantic(
+        shard.lang,
+        config,
+        repo_path,
+        ir_store,
+        degradation_list=semantic_degradations
+    )
+    if degradation_list is not None:
+        degradation_list.extend(semantic_degradations)
+    trace.append({
+        "kind": "semantic",
+        "selected": semantic.provider_name,
+        "preference": config.get("semantic_preference", ["lsp", "lsif", "codegraph", "ctags", "null"]),
+        "fallback": bool(getattr(semantic, "use_fallback", False)),
+        "degradation_reasons": semantic_degradations
+    })
+
+    embedding = resolve_embedding(config)
+    trace.append({
+        "kind": "embedding",
+        "selected": embedding.provider_name,
+        "preference": config.get("embedding_preference", "keyword"),
+        "fallback": embedding.provider_name == "KeywordFallbackProvider"
+    })
+
+    framework_providers = resolve_frameworks(profile, shard.lang)
+    framework_names = [fw.framework_name for fw in framework_providers] or ["GenericFrameworkProvider"]
+    trace.append({
+        "kind": "framework",
+        "selected": framework_names,
+        "detected_frameworks": profile.frameworks,
+        "fallback": "GenericFrameworkProvider" in framework_names
+    })
+
+    return {
+        "parser": parser.provider_name,
+        "semantic": semantic.provider_name,
+        "embedding": embedding.provider_name,
+        "framework": framework_names[0],
+        "frameworks": framework_names,
+        "selector_trace": trace
+    }
+
 def resolve_provider_by_name(name: str, config: Dict[str, Any], repo_path: str = "", ir_store: Any = None) -> Any:
     """
     Instantiates a provider by its class name, maintaining the degraded state.

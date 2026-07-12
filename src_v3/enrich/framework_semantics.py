@@ -52,7 +52,9 @@ def enrich_framework_semantics(
                         "route": ep["route"],
                         "method": ep["method"],
                         "confidence": ep["confidence"],
-                        "provider_name": provider.framework_name
+                        "provider_name": provider.framework_name,
+                        "framework_name": provider.framework_name,
+                        "framework_trace": ep.get("framework_trace", {})
                     }
                     updated_count += 1
         except Exception as e:
@@ -67,7 +69,9 @@ def enrich_framework_semantics(
                     symbols_map[node_id].attributes["framework_guard"] = {
                         "guard_kind": gd["guard_kind"],
                         "confidence": gd["confidence"],
-                        "provider_name": provider.framework_name
+                        "provider_name": provider.framework_name,
+                        "framework_name": provider.framework_name,
+                        "framework_trace": gd.get("framework_trace", {})
                     }
                     updated_count += 1
                     
@@ -82,7 +86,9 @@ def enrich_framework_semantics(
                         attributes={
                             "guard_kind": gd["guard_kind"],
                             "confidence": gd["confidence"],
-                            "provider_name": provider.framework_name
+                            "provider_name": provider.framework_name,
+                            "framework_name": provider.framework_name,
+                            "framework_trace": gd.get("framework_trace", {})
                         }
                     ))
         except Exception as e:
@@ -97,7 +103,10 @@ def enrich_framework_semantics(
                     symbols_map[node_id].attributes["framework_resource"] = {
                         "resource_type": rs["resource_type"],
                         "resource_details": rs["resource_details"],
-                        "provider_name": provider.framework_name
+                        "confidence": rs.get("confidence", 0.8),
+                        "provider_name": provider.framework_name,
+                        "framework_name": provider.framework_name,
+                        "framework_trace": rs.get("framework_trace", {})
                     }
                     updated_count += 1
                     
@@ -112,7 +121,10 @@ def enrich_framework_semantics(
                         attributes={
                             "resource_type": rs["resource_type"],
                             "resource_details": rs["resource_details"],
-                            "provider_name": provider.framework_name
+                            "confidence": rs.get("confidence", 0.8),
+                            "provider_name": provider.framework_name,
+                            "framework_name": provider.framework_name,
+                            "framework_trace": rs.get("framework_trace", {})
                         }
                     ))
         except Exception as e:
@@ -128,7 +140,10 @@ def enrich_framework_semantics(
                         "state_field": ts["state_field"],
                         "from_state": ts["from_state"],
                         "to_state": ts["to_state"],
-                        "provider_name": provider.framework_name
+                        "confidence": ts.get("confidence", 0.8),
+                        "provider_name": provider.framework_name,
+                        "framework_name": provider.framework_name,
+                        "framework_trace": ts.get("framework_trace", {})
                     }
                     updated_count += 1
                     
@@ -144,7 +159,10 @@ def enrich_framework_semantics(
                             "state_field": ts["state_field"],
                             "from_state": ts["from_state"],
                             "to_state": ts["to_state"],
-                            "provider_name": provider.framework_name
+                            "confidence": ts.get("confidence", 0.8),
+                            "provider_name": provider.framework_name,
+                            "framework_name": provider.framework_name,
+                            "framework_trace": ts.get("framework_trace", {})
                         }
                     ))
         except Exception as e:
