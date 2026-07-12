@@ -5,8 +5,9 @@ import tempfile
 import shutil
 from unittest.mock import patch
 from src_v3.core.models import RepoProfile, LanguageShard
-from src_v3.core.provider_registry import resolve_parser, resolve_semantic, resolve_embedding
+from src_v3.core.provider_registry import resolve_parser, resolve_semantic, resolve_embedding, resolve_frameworks
 from src_v3.providers.parser.treesitter_native import TreeSitterNativeProvider
+from src_v3.providers.parser.treesitter_wasm import TreeSitterWASMProvider
 from src_v3.providers.semantic.null_provider import NullProvider
 from src_v3.providers.semantic.lsp_provider import LSPProvider
 from src_v3.providers.semantic.lsif_provider import LSIFProvider
@@ -143,6 +144,20 @@ class TestProviders(unittest.TestCase):
         # Should behave gracefully if model is not loaded
         self.assertFalse(fp.build_index([], ""))
         self.assertEqual(fp.search("query", "", 5), [])
+
+    def test_wasm_provider_is_transparent_native_shim(self):
+        provider = TreeSitterWASMProvider()
+        self.assertFalse(provider.is_real_wasm_runtime)
+        self.assertEqual(provider.runtime_kind, "native-shim")
+        self.assertEqual(provider.provider_version(), "1.0.0-native-shim")
+        self.assertTrue(provider.is_fallback_for_lang("python"))
+
+    def test_resolve_frameworks_preserves_multiple_matches(self):
+        profile = RepoProfile(frameworks=["django", "fastapi"])
+        providers = resolve_frameworks(profile, "python")
+        names = [p.framework_name for p in providers]
+        self.assertIn("DjangoPack", names)
+        self.assertIn("GenericFrameworkProvider", names)
 
 if __name__ == "__main__":
     unittest.main()

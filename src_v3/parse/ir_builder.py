@@ -91,6 +91,10 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
         # Store parsing mode and check if fallback was used
         parse_mode = tree.get("mode") if isinstance(tree, dict) else "unknown"
         file_node.attributes["parse_mode"] = parse_mode
+        if isinstance(tree, dict):
+            for attr_name in ["parser_runtime", "is_real_wasm_runtime", "degradation_reason"]:
+                if attr_name in tree:
+                    file_node.attributes[attr_name] = tree[attr_name]
         
         # 2. Extract symbols
         symbols_data = provider.extract_symbols(tree, query_pack)

@@ -39,7 +39,7 @@ def main():
         profile = scan_repository(repo_path, workspace_dir)
         
         # 2. Detect frameworks
-        detected_fws_dict = detect_frameworks(repo_path, profile)
+        detected_fws_dict = detect_frameworks(repo_path, profile, workspace_dir)
         profile.frameworks = sorted(list(detected_fws_dict.keys()))
         profile.framework_confidence = detected_fws_dict
         
@@ -63,13 +63,16 @@ def main():
                 "parser": parser_prov.provider_name,
                 "semantic": semantic_prov.provider_name,
                 "embedding": embedding_prov.provider_name,
-                "framework": "GenericFrameworkProvider"
+                "framework": "GenericFrameworkProvider",
+                "frameworks": ["GenericFrameworkProvider"]
             }
             # Resolve framework providers using the provider registry
             from src_v3.core.provider_registry import resolve_frameworks
             fw_provs = resolve_frameworks(profile, shard.lang)
             if fw_provs:
-                shard.provider_set["framework"] = fw_provs[0].framework_name
+                framework_names = [fw.framework_name for fw in fw_provs]
+                shard.provider_set["framework"] = framework_names[0]
+                shard.provider_set["frameworks"] = framework_names
                 
             # Resolve capability (initialize to L0 as no parsing/indexing has run yet)
             from src_v3.core.enums import CapabilityLevel

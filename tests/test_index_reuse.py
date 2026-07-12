@@ -23,6 +23,8 @@ class TestIndexReuse(unittest.TestCase):
             "schema_version": "3",
             "embedding_model": "KeywordFallbackProvider",
             "embedding_config_hash": "embed_hash",
+            "semantic_provider": "CtagsProvider",
+            "semantic_config_hash": "semantic_hash",
             "chunking_config_hash": "chunk_hash",
             "content_hash": "content_1"
         }
@@ -34,6 +36,8 @@ class TestIndexReuse(unittest.TestCase):
             "schema_version": "3",
             "embedding_model": "KeywordFallbackProvider",
             "embedding_config_hash": "embed_hash",
+            "semantic_provider": "CtagsProvider",
+            "semantic_config_hash": "semantic_hash",
             "chunking_config_hash": "chunk_hash",
             "content_hash": "content_1"
         }
@@ -70,6 +74,8 @@ class TestIndexReuse(unittest.TestCase):
             "schema_version": "3",
             "embedding_model": "KeywordFallbackProvider",
             "embedding_config_hash": "embed_hash",
+            "semantic_provider": "CtagsProvider",
+            "semantic_config_hash": "semantic_hash",
             "chunking_config_hash": "chunk_hash",
             "content_hash": "content_1"
         }
@@ -106,7 +112,12 @@ class TestIndexReuse(unittest.TestCase):
         fp_changed_schema["schema_version"] = "4"
         self.assertFalse(self.cache.is_valid("app.py", fp_changed_schema))
         
-        # 4. Delete record -> invalid
+        # 4. Semantic provider/config change -> invalid
+        fp_changed_semantic = fingerprint_orig.copy()
+        fp_changed_semantic["semantic_config_hash"] = "semantic_hash_2"
+        self.assertFalse(self.cache.is_valid("app.py", fp_changed_semantic))
+        
+        # 5. Delete record -> invalid
         self.cache.delete_file_record("app.py")
         self.assertFalse(self.cache.is_valid("app.py", fingerprint_orig))
         self.assertIsNone(self.cache.get_file_record("app.py"))

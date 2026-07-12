@@ -63,7 +63,7 @@ def main():
         # Initialize Index Cache
         cache_dir = args.index_cache_dir or os.path.join(workspace_dir, "cache", "index")
         index_cache = IndexCache(Path(cache_dir))
-        cache_manifest = index_cache.load_manifest()
+        cache_manifest = index_cache.manifest
         
         config = plan.summary.get("config", {})
         
@@ -139,6 +139,17 @@ def main():
                 from src_v3.providers.semantic.ctags_provider import CtagsProvider
                 semantic = CtagsProvider(repo_path, ir_store)
                 degradation_reasons.append(f"Shard {shard.shard_id}: unconfigured LSP/LSIF/CodeGraph provider downgraded to CtagsProvider")
+                
+            semantic_config = {
+                "provider": semantic.provider_name,
+                "confidence": semantic.resolution_confidence(),
+                "use_fallback": getattr(semantic, "use_fallback", False),
+                "lsp_server_address": config.get("lsp_server_address"),
+                "lsif_path": config.get("lsif_path"),
+                "codegraph_endpoint": config.get("codegraph_endpoint"),
+                "semantic_preference": config.get("semantic_preference"),
+            }
+            semantic_config_hash = hashlib.md5(json.dumps(semantic_config, sort_keys=True).encode('utf-8')).hexdigest()
 
             symbol_records = []
             semantic_index_data = {}
@@ -158,6 +169,8 @@ def main():
                     "schema_version": plan.version or "3",
                     "embedding_model": embedding.provider_name,
                     "embedding_config_hash": embedding_config_hash,
+                    "semantic_provider": semantic.provider_name,
+                    "semantic_config_hash": semantic_config_hash,
                     "chunking_config_hash": chunking_config_hash,
                     "content_hash": file_hash
                 }
@@ -280,6 +293,8 @@ def main():
                     "parser_version": parser.provider_version(),
                     "schema_version": plan.version or "3",
                     "embedding_config_hash": embedding_config_hash,
+                    "semantic_provider": semantic.provider_name,
+                    "semantic_config_hash": semantic_config_hash,
                     "symbols": file_semantic_data,
                     "chunks": [],
                     "edges": [e.to_dict() for e in file_edges],
@@ -392,8 +407,11 @@ def main():
                 for file_node in ir_store.get_file_nodes():
                     if file_node.file in shard_files:
                         p_mode = file_node.attributes.get("parse_mode")
+                        reason = file_node.attributes.get("degradation_reason")
                         if p_mode in ["python_ast", "regex"]:
                             degradation_reasons.append(f"Parser downgraded to {p_mode} fallback for {file_node.file}")
+                        elif reason:
+                            degradation_reasons.append(f"Parser degraded for {file_node.file}: {reason}")
 
         # Update overall RunManifest
         if plan.run_manifest:

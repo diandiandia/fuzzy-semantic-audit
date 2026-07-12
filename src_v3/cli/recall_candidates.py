@@ -77,11 +77,25 @@ def main():
             # 2. Enrich semantic calling relations
             enrich_semantic_relations(workspace_dir, repo_path, shard, semantic_provider)
             
-            # 3. Enrich framework annotations based on saved provider_set
-            fw_provider_name = shard.provider_set.get("framework", "GenericFrameworkProvider")
-            fw_provider = resolve_provider_by_name(fw_provider_name, config, repo_path, ir_store)
-            if fw_provider:
-                enrich_framework_semantics(workspace_dir, shard, [fw_provider])
+            # 3. Enrich framework annotations based on saved provider_set.
+            # Prefer the full provider list and keep legacy single-provider plans working.
+            fw_provider_names = shard.provider_set.get("frameworks")
+            if not fw_provider_names:
+                fw_provider_names = [shard.provider_set.get("framework", "GenericFrameworkProvider")]
+            elif isinstance(fw_provider_names, str):
+                fw_provider_names = [name.strip() for name in fw_provider_names.split(",") if name.strip()]
+
+            fw_providers = []
+            seen_fw_names = set()
+            for fw_provider_name in fw_provider_names:
+                if fw_provider_name in seen_fw_names:
+                    continue
+                seen_fw_names.add(fw_provider_name)
+                fw_provider = resolve_provider_by_name(fw_provider_name, config, repo_path, ir_store)
+                if fw_provider:
+                    fw_providers.append(fw_provider)
+            if fw_providers:
+                enrich_framework_semantics(workspace_dir, shard, fw_providers)
             
             # 4. Perform multi-channel recall
             shard_candidates = orchestrate_recall(workspace_dir, shard, plan.audit_tracks, config)

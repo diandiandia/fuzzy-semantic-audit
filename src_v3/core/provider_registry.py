@@ -118,21 +118,29 @@ def resolve_frameworks(profile: RepoProfile, lang: str) -> List[Any]:
     from src_v3.providers.framework.generic import GenericFrameworkProvider
 
     providers = []
+    matched_frameworks = set()
     for fw in profile.frameworks:
         fw_lower = fw.lower()
         if fw_lower == "django" and lang == "python":
             providers.append(DjangoPack())
+            matched_frameworks.add(fw_lower)
         elif fw_lower == "express" and lang in ["javascript", "typescript"]:
             providers.append(ExpressPack())
+            matched_frameworks.add(fw_lower)
         elif fw_lower == "spring" and lang in ["java", "kotlin"]:
             providers.append(SpringPack())
+            matched_frameworks.add(fw_lower)
         elif fw_lower == "gin" and lang == "go":
             providers.append(GinPack())
+            matched_frameworks.add(fw_lower)
         elif fw_lower == "android" and lang in ["java", "kotlin"]:
             providers.append(AndroidPack())
+            matched_frameworks.add(fw_lower)
             
-    # Always fall back to GenericFrameworkProvider if no specific framework matches
-    if not providers:
+    # Fall back to GenericFrameworkProvider when there is no specific match, or
+    # when detected frameworks have no dedicated provider for this language.
+    unmatched_frameworks = {fw.lower() for fw in profile.frameworks} - matched_frameworks
+    if not providers or unmatched_frameworks:
         providers.append(GenericFrameworkProvider())
     return providers
 

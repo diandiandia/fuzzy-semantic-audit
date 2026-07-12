@@ -23,26 +23,21 @@ class TreeSitterWASMProvider(TreeSitterNativeProvider):
     
     def __init__(self):
         super().__init__()
-        # Simulated check for WASM parser runtime readiness
-        self.wasm_ready = True
+        self.wasm_ready = False
 
     def parse_file(self, file_path: str, lang: str) -> Any:
         """
-        Parses a file using the simulated WASM Tree-sitter runtime.
-        Returns a dict indicating WASM mode parsing.
+        Parses a file through the native compatibility shim.
+        The result explicitly records that no real WASM runtime was used.
         """
         res = super().parse_file(file_path, lang)
-        if res.get("mode") == "tree_sitter":
-            res["mode"] = "tree_sitter_wasm"
+        res["parser_runtime"] = self.runtime_kind
+        res["is_real_wasm_runtime"] = False
+        res["degradation_reason"] = "TreeSitterWASMProvider is a native compatibility shim, not a real WASM runtime"
         return res
 
     def provider_version(self) -> str:
-        return "1.0.0-wasm"
+        return "1.0.0-native-shim"
 
     def is_fallback_for_lang(self, lang: str) -> bool:
-        # Standard WASM compilation target languages supported by the provider
-        supported_wasm_langs = {"python", "javascript", "typescript", "go", "java", "c", "cpp"}
-        if self.use_fallback or lang not in supported_wasm_langs:
-            return True
-        return False
-
+        return True

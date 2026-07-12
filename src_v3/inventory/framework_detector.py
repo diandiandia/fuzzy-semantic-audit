@@ -1,14 +1,16 @@
 import os
 import re
 from typing import List, Dict
+from src_v3.core.boundary import WorkspaceBoundary
 from src_v3.core.models import RepoProfile
 
-def detect_frameworks(repo_path: str, profile: RepoProfile) -> Dict[str, float]:
+def detect_frameworks(repo_path: str, profile: RepoProfile, workspace_dir: str = "") -> Dict[str, float]:
     """
     Detects frameworks used in the repository by reading dependencies and looking at project files.
     Returns a dictionary mapping framework name to confidence score (0.0 to 1.0).
     """
     repo_path = os.path.abspath(repo_path)
+    boundary = WorkspaceBoundary(workspace_dir)
     detected: Dict[str, float] = {}
     
     # Helper to set highest confidence
@@ -97,9 +99,19 @@ def detect_frameworks(repo_path: str, profile: RepoProfile) -> Dict[str, float]:
 
     # Search for AndroidManifest.xml for Android
     for root, dirs, files in os.walk(repo_path):
+        abs_root = os.path.abspath(root)
+        if boundary.is_excluded(abs_root):
+            dirs[:] = []
+            continue
         # limit depth to avoid deep scanning
-        if ".git" in dirs:
-            dirs.remove(".git")
+        dirs[:] = [
+            d for d in dirs
+            if not d.startswith(".")
+            and d.lower() not in WorkspaceBoundary.get_default_exclude_dirs()
+            and not boundary.is_excluded(os.path.join(root, d))
+            and not os.path.exists(os.path.join(root, d, "audit_plan.json"))
+            and not os.path.exists(os.path.join(root, d, "run_manifest.json"))
+        ]
         if "AndroidManifest.xml" in files:
             add_fw("android", 0.98)
             break

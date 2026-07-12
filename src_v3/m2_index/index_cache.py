@@ -73,7 +73,17 @@ class IndexCache:
             return False
             
         cached_fp = cached_files[rel_path]
-        for k in ["parser_version", "schema_version", "embedding_model", "embedding_config_hash", "chunking_config_hash", "content_hash"]:
+        required_keys = [
+            "parser_version",
+            "schema_version",
+            "embedding_model",
+            "embedding_config_hash",
+            "semantic_provider",
+            "semantic_config_hash",
+            "chunking_config_hash",
+            "content_hash",
+        ]
+        for k in required_keys:
             if cached_fp.get(k) != fingerprint.get(k):
                 return False
         return True

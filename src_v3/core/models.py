@@ -29,7 +29,7 @@ class LanguageShard:
     lang: str
     paths: List[str] = field(default_factory=list)
     frameworks: List[str] = field(default_factory=list)
-    provider_set: Dict[str, str] = field(default_factory=dict)
+    provider_set: Dict[str, Any] = field(default_factory=dict)
     capability: str = "L0"
     status: str = "discovered"
     updated_at: str = ""
