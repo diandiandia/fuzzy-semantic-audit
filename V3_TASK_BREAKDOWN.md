@@ -42,17 +42,17 @@
 | P2 Provider / Index | `partial` | LSP 已执行真实协议握手，LSIF/CodeGraph 有后端路径；仍缺少真实服务和 LSIF 样本的兼容性矩阵。 |
 | P3 Framework / Recall / Candidate | `partial` | pack 与多路召回可用，但语言/框架覆盖和语义精度仍需扩展。 |
 | P4 Prune / Evidence / Verify | `partial` | 类型上下文、BFS 和并发 triage 可用；参数传播与裁判质量仍为近似实现。 |
-| P5 Report / Workflow / E2E | `partial` | workflow 已支持重试，回归覆盖了完整二次运行；尚无真实仓库黄金集和 index reuse 基准。 |
+| P5 Report / Workflow / E2E | `partial` | workflow 已支持重试，回归覆盖了完整二次运行；真实仓库黄金集接入机制已建立，但缺少本地真实 checkout 与性能收益基准。 |
 
 截至 `2026-07-11` 按任务 DoD 重新校准:
 
-- 已 100% 完成开发: `T01-T08`、`T10`、`T13`、`T15-T19`、`T22-T24`、`T28-T29`、`T33-T34`、`T40`、`T47`、`T53`、`T55`、`T58-T60`、`T62-T66`、`T69-T72`
-- 尚未 100% 完成开发: `T09`、`T11-T12`、`T14`、`T20-T21`、`T25-T27`、`T30-T32`、`T35-T39`、`T41-T46`、`T48-T52`、`T54`、`T56-T57`、`T61`、`T67-T68`
+- 已 100% 完成开发: `T01-T08`、`T10`、`T13`、`T15-T19`、`T22-T24`、`T28-T29`、`T33-T34`、`T40`、`T47`、`T53`、`T55`、`T58-T60`、`T62-T66`、`T69-T70`
+- 尚未 100% 完成开发: `T09`、`T11-T12`、`T14`、`T20-T21`、`T25-T27`、`T30-T32`、`T35-T39`、`T41-T46`、`T48-T52`、`T54`、`T56-T57`、`T61`、`T67-T68`、`T71-T72`
 
 当前优先级最高的缺口:
 1. 为 LSP、LSIF、CodeGraph 建立真实后端/格式兼容性测试矩阵，而非仅 mock 协议测试。
-2. 建立固定真实仓库的黄金样例，覆盖 candidate total、fallback ratio、precision@N、compression ratio。
-3. 实现并验证 index reuse；当前只验证 IR cache 命中。
+2. 接入固定真实仓库 checkout 的黄金样例，覆盖 candidate total、fallback ratio、precision@N、compression ratio。
+3. 建立 index reuse 性能收益基准，而不只验证 reused/rebuilt/cache hit 指标。
 
 
 ---
@@ -217,8 +217,8 @@
 - T62-T66 `done`: 基础报告与编译链路可用。
 - T67-T68 `partial`: workflow 有重试且 triage 内部并发，阶段编排仍受依赖链限制。
 - T69-T70 `done`: 核心单元与 CLI 集成链路已覆盖。
-- T71 `done`: 已建立 Golden baseline 轻量测试框架与评测脚本。
-- T72 `done`: 已通过集成测试验证 index reuse 和 cache 命中率指标。
+- T71 `partial`: 已建立 Golden baseline 轻量测试框架与评测脚本，可对接本地真实仓库 checkout；尚缺真实仓库常驻基线数据。
+- T72 `partial`: 已通过集成测试验证 index reuse 和 cache 命中率指标；尚缺稳定性能收益基准。
 
 ---
 

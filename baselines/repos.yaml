@@ -1,6 +1,9 @@
 repos:
   - id: airflow
     name: apache/airflow
+    category: business_application
+    local_path_env: FSA_BASELINE_AIRFLOW_DIR
+    checkout_dir: airflow
     language_mix:
       - python
     type: open_source
@@ -13,6 +16,9 @@ repos:
 
   - id: grafana
     name: grafana/grafana
+    category: system_infrastructure
+    local_path_env: FSA_BASELINE_GRAFANA_DIR
+    checkout_dir: grafana
     language_mix:
       - go
       - typescript
@@ -26,6 +32,9 @@ repos:
 
   - id: supabase
     name: supabase/supabase
+    category: multilingual_monorepo
+    local_path_env: FSA_BASELINE_SUPABASE_DIR
+    checkout_dir: supabase
     language_mix:
       - typescript
       - sql
