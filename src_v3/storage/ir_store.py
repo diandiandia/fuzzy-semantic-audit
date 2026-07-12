@@ -16,12 +16,26 @@ class IRStore:
         self.files_path = os.path.join(self.ir_dir, "files.jsonl")
         self.symbols_path = os.path.join(self.ir_dir, "symbols.jsonl")
         self.edges_path = os.path.join(self.ir_dir, "edges.jsonl")
+        self._file_nodes_cache = None
+        self._symbol_nodes_cache = None
+        self._edges_cache = None
 
     def save(self, nodes: List[IRNode], edges: List[IREdge], overwrite: bool = True) -> None:
         """
         Saves nodes and edges to respective JSONL files.
         If overwrite is False, appends to the files.
         """
+        self._file_nodes_cache = None
+        self._symbol_nodes_cache = None
+        self._edges_cache = None
+        if hasattr(self, "_symbols_by_file_cache"):
+            delattr(self, "_symbols_by_file_cache")
+        if hasattr(self, "_node_by_id_cache"):
+            delattr(self, "_node_by_id_cache")
+        if hasattr(self, "_caller_map_cache"):
+            delattr(self, "_caller_map_cache")
+        if hasattr(self, "_callee_map_cache"):
+            delattr(self, "_callee_map_cache")
         # Split nodes into files and symbols/other code elements
         file_nodes = [n for n in nodes if n.kind == "file"]
         symbol_nodes = [n for n in nodes if n.kind != "file"]
@@ -125,12 +139,15 @@ class IRStore:
         return list(self.iter_file_nodes())
 
     def iter_file_nodes(self) -> Generator[IRNode, None, None]:
-        if not os.path.exists(self.files_path):
-            return
-        with open(self.files_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.strip():
-                    yield IRNode.from_dict(json.loads(line.strip()))
+        if self._file_nodes_cache is None:
+            self._file_nodes_cache = []
+            if os.path.exists(self.files_path):
+                with open(self.files_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            self._file_nodes_cache.append(IRNode.from_dict(json.loads(line.strip())))
+        for fn in self._file_nodes_cache:
+            yield fn
 
     def get_symbol_nodes(self) -> List[IRNode]:
         """
@@ -139,12 +156,15 @@ class IRStore:
         return list(self.iter_symbol_nodes())
 
     def iter_symbol_nodes(self) -> Generator[IRNode, None, None]:
-        if not os.path.exists(self.symbols_path):
-            return
-        with open(self.symbols_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.strip():
-                    yield IRNode.from_dict(json.loads(line.strip()))
+        if self._symbol_nodes_cache is None:
+            self._symbol_nodes_cache = []
+            if os.path.exists(self.symbols_path):
+                with open(self.symbols_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            self._symbol_nodes_cache.append(IRNode.from_dict(json.loads(line.strip())))
+        for sn in self._symbol_nodes_cache:
+            yield sn
 
     def get_edges(self) -> List[IREdge]:
         """
@@ -153,34 +173,37 @@ class IRStore:
         return list(self.iter_edges())
 
     def iter_edges(self) -> Generator[IREdge, None, None]:
-        if not os.path.exists(self.edges_path):
-            return
-        with open(self.edges_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.strip():
-                    yield IREdge.from_dict(json.loads(line.strip()))
+        if self._edges_cache is None:
+            self._edges_cache = []
+            if os.path.exists(self.edges_path):
+                with open(self.edges_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            self._edges_cache.append(IREdge.from_dict(json.loads(line.strip())))
+        for ed in self._edges_cache:
+            yield ed
 
     def get_symbols_by_file(self, rel_file_path: str) -> List[IRNode]:
         """
         Queries all symbols belonging to a specific file.
         """
-        results = []
-        for sn in self.iter_symbol_nodes():
-            if sn.file == rel_file_path:
-                results.append(sn)
-        return results
+        if not hasattr(self, "_symbols_by_file_cache"):
+            self._symbols_by_file_cache = {}
+            for sn in self.iter_symbol_nodes():
+                self._symbols_by_file_cache.setdefault(sn.file, []).append(sn)
+        return self._symbols_by_file_cache.get(rel_file_path, [])
 
     def get_node_by_id(self, node_id: str) -> Optional[IRNode]:
         """
         Searches for any node by its ID.
         """
-        for fn in self.iter_file_nodes():
-            if fn.node_id == node_id:
-                return fn
-        for sn in self.iter_symbol_nodes():
-            if sn.node_id == node_id:
-                return sn
-        return None
+        if not hasattr(self, "_node_by_id_cache"):
+            self._node_by_id_cache = {}
+            for fn in self.iter_file_nodes():
+                self._node_by_id_cache[fn.node_id] = fn
+            for sn in self.iter_symbol_nodes():
+                self._node_by_id_cache[sn.node_id] = sn
+        return self._node_by_id_cache.get(node_id)
 
     def get_nodes_by_kind(self, kind: str) -> List[IRNode]:
         """
@@ -233,3 +256,19 @@ class IRStore:
             if ed.dst_node_id == dst_node_id:
                 results.append(ed)
         return results
+
+    def get_caller_map(self) -> Dict[str, List[str]]:
+        if not hasattr(self, "_caller_map_cache"):
+            self._caller_map_cache = {}
+            for edge in self.iter_edges():
+                if edge.kind == "call":
+                    self._caller_map_cache.setdefault(edge.dst_node_id, []).append(edge.src_node_id)
+        return self._caller_map_cache
+
+    def get_callee_map(self) -> Dict[str, List[str]]:
+        if not hasattr(self, "_callee_map_cache"):
+            self._callee_map_cache = {}
+            for edge in self.iter_edges():
+                if edge.kind == "call":
+                    self._callee_map_cache.setdefault(edge.src_node_id, []).append(edge.dst_node_id)
+        return self._callee_map_cache

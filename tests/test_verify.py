@@ -4,8 +4,9 @@ import shutil
 import tempfile
 import json
 from src_v3.verify.verdict_policy import evaluate_verdict
+from src_v3.verify.llm_triage import run_three_lens_referee
 from src_v3.verify.writeback import VerificationWriteback
-from src_v3.core.models import CandidateRecord, VerificationResult, AuditPlan, RunManifest
+from src_v3.core.models import CandidateRecord, VerificationResult, AuditPlan, RunManifest, EvidenceBundle
 from src_v3.storage.candidate_store import CandidateStore
 from src_v3.storage.queue_store import QueueStore
 
@@ -40,6 +41,36 @@ class TestVerify(unittest.TestCase):
             run_capability="L2"
         )
         self.assertEqual(v5, "deferred")
+
+    def test_llm_triage_external_failure_degrades_to_maybe_not_error(self):
+        cand = CandidateRecord(
+            candidate_id="c1", identity_key="k1", shard_id="s1", lang="python",
+            file="app.py", symbol="handle", span={"start": 1, "end": 3},
+            priority_score=80.0, candidate_capability="L1", status="queued_for_verify"
+        )
+        bundle = EvidenceBundle(
+            candidate_id="c1",
+            symbol_body="def handle(user):\n    return user\n"
+        )
+
+        old_openai = os.environ.pop("OPENAI_API_KEY", None)
+        old_gemini = os.environ.pop("GEMINI_API_KEY", None)
+        try:
+            votes, warnings = run_three_lens_referee(cand, bundle, {})
+        finally:
+            if old_openai is not None:
+                os.environ["OPENAI_API_KEY"] = old_openai
+            if old_gemini is not None:
+                os.environ["GEMINI_API_KEY"] = old_gemini
+
+        self.assertEqual(votes["reachability"], "MAYBE")
+        self.assertEqual(votes["guarded"], "MAYBE")
+        self.assertEqual(votes["exploitability"], "MAYBE")
+        self.assertTrue(votes["degraded"])
+        self.assertNotIn("error", votes)
+        self.assertEqual(len(warnings), 3)
+        verdict, _ = evaluate_verdict(votes, "L1", "L1")
+        self.assertEqual(verdict, "needs_review")
 
     def test_verification_writeback(self):
         wb = VerificationWriteback(self.tmp_dir)

@@ -55,16 +55,9 @@ def assemble_evidence(
     max_bfs_depth_up = track_pack.get("evidence_bfs_depth_up", 5)
     max_bfs_depth_down = track_pack.get("evidence_bfs_depth_down", 3)
     
-    # Traverse graph for call chains, entrypoints, resources, guards
-    edges = ir_store.get_edges()
-    
     # Caller/Callee maps
-    caller_map = {}
-    callee_map = {}
-    for edge in edges:
-        if edge.kind == "call":
-            caller_map.setdefault(edge.dst_node_id, []).append(edge.src_node_id)
-            callee_map.setdefault(edge.src_node_id, []).append(edge.dst_node_id)
+    caller_map = ir_store.get_caller_map()
+    callee_map = ir_store.get_callee_map()
             
     # Gather immediate callers
     caller_chain = []
@@ -191,9 +184,8 @@ def assemble_evidence(
                 
     # Extract real type and class definitions in the same file for type_or_model_context
     type_or_model_context = []
-    for node in ir_store.get_symbol_nodes():
-        if node.file == candidate.file:
-            if node.kind == "type_hint" or (node.kind == "symbol" and node.attributes.get("symbol_kind") == "class"):
+    for node in ir_store.get_symbols_by_file(candidate.file):
+        if node.kind == "type_hint" or (node.kind == "symbol" and node.attributes.get("symbol_kind") == "class"):
                 type_or_model_context.append({
                     "symbol": node.symbol,
                     "kind": node.kind if node.kind != "symbol" else "class",

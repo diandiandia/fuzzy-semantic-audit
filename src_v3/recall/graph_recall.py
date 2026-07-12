@@ -31,8 +31,9 @@ def expand_by_graph(
     edges = ir_store.get_edges()
     call_edges = [e for e in edges if e.kind == "call"]
     
-    # Build adjacency list
+    # Build adjacency list and trace lookup map
     adj: Dict[str, List[tuple]] = {}
+    trace_map = {}
     for edge in call_edges:
         src = edge.src_node_id
         dst = edge.dst_node_id
@@ -42,7 +43,10 @@ def expand_by_graph(
             adj[dst] = []
         adj[src].append((dst, "callee"))
         adj[dst].append((src, "caller"))
-        
+
+        trace_map[(src, dst)] = edge.provider_trace
+        trace_map[(dst, src)] = edge.provider_trace
+
     # Multi-hop BFS
     current_frontier = set(seed_nodes)
     visited_nodes = set(seed_nodes)
@@ -70,11 +74,11 @@ def expand_by_graph(
                                 source_tracks=[track],
                                 matched_rules=[f"graph.hop{hop+1}.{direction}"],
                                 recall_sources=["graph"],
-                                provider_trace=list(set(trace for edge in call_edges if (edge.src_node_id == node and edge.dst_node_id == neighbor) or (edge.src_node_id == neighbor and edge.dst_node_id == node) for trace in edge.provider_trace)),
+                                provider_trace=trace_map.get((node, neighbor), []) or trace_map.get((neighbor, node), []),
                                 priority_score=max(30.0, 60.0 - (hop * 10)),
                                 candidate_capability=shard.capability,
                                 status="discovered"
-                            ))
+                             ))
         current_frontier = next_frontier
         if not current_frontier:
             break

@@ -59,14 +59,10 @@ def extract_features(
     if sn:
         # A. Code quality score
         features["code_quality_score"] = sn.attributes.get("code_density", 0.8)
-        
+
         # B. Call graph BFS for reachability and framework relevance
-        edges = ir_store.get_edges()
-        caller_map = {}
-        for edge in edges:
-            if edge.kind == "call":
-                caller_map.setdefault(edge.dst_node_id, []).append(edge.src_node_id)
-                
+        caller_map = ir_store.get_caller_map()
+
         queue = [(sn.node_id, 0)]
         visited = {sn.node_id}
         

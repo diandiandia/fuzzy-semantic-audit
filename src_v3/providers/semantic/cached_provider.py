@@ -9,10 +9,20 @@ class CachedSemanticProvider(SemanticProvider):
     def __init__(self, fallback_provider: SemanticProvider, workspace_dir: str, shard_id: str):
         self.fallback = fallback_provider
         self.provider_name = f"Cached({fallback_provider.provider_name})"
-        
+
         # Load compiled semantic index from IndexStore
         index_store = IndexStore(workspace_dir)
-        self.index_data = index_store.load_semantic_index(shard_id)
+        self.index_data = index_store.load_semantic_index(shard_id) or {}
+
+        # Build O(1) lookup map: (symbol, file, start_line) -> nid
+        self._key_map = {}
+        for nid, data in self.index_data.items():
+            sym = data.get("symbol")
+            f = data.get("file")
+            start_line = data.get("span", {}).get("start")
+            self._key_map[(sym, f, start_line)] = nid
+            if (sym, f, None) not in self._key_map:
+                self._key_map[(sym, f, None)] = nid
 
     def capability_level(self) -> str:
         return self.fallback.capability_level()
@@ -28,12 +38,11 @@ class CachedSemanticProvider(SemanticProvider):
         if not self.index_data:
             return ""
             
-        for nid, data in self.index_data.items():
-            if data.get("symbol") == symbol and data.get("file") == file:
-                n_span = data.get("span", {})
-                if not span or not n_span or (span.get("start") == n_span.get("start")):
-                    return nid
-        return ""
+        start_line = span.get("start") if span else None
+        nid = self._key_map.get((symbol, file, start_line))
+        if nid:
+            return nid
+        return self._key_map.get((symbol, file, None), "")
 
     def find_definitions(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
         nid = self._get_node_key(symbol_ref)

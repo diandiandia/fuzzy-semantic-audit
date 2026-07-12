@@ -178,7 +178,7 @@
 - T18 `done`: IR cache 基础可用。
 - T19 `done`: IR store 已支持 nodes/edges 持久化与按 file/symbol/kind/source/destination 查询。
 - T20 `partial`: 边界主路径可用，缺少复杂历史产物仓库的测试。
-- T21 `partial`: 能写入降级原因，尚缺多语言错误/降级覆盖。
+- T21 `partial`: 能写入解析降级原因；IR 子提取失败已结构化记录到 file node，仍缺完整多语言解析质量覆盖。
 
 ### P2 当前判断
 
@@ -199,9 +199,9 @@
 - T37 `partial`: 首批框架包可用，覆盖面未达到完整类别。
 - T38-T39 `partial`: enrich 基础可用，框架语义仍以规则/启发式为主。
 - T40 `done`: recall normalizer 已满足 `identity_key` 去重与多来源合并 DoD。
-- T41-T46 `partial`: 多路召回与 trace 可用，质量仍依赖不完整语义图和启发式规则。
+- T41-T46 `partial`: 多路召回与 trace 可用；单通道失败已显式写入 event/metrics 并继续其他通道，质量仍依赖不完整语义图和启发式规则。
 - T47 `done`: candidate store 基础可用。
-- T48 `partial`: CLI 可运行，尚无真实仓库召回质量基线。
+- T48 `partial`: CLI 可运行，召回覆盖/零召回/通道失败可见，尚无真实仓库召回质量基线。
 
 ### P4 当前判断
 
@@ -210,7 +210,7 @@
 - T54-T56 `partial`: 类型上下文和 BFS 已增强，参数传播等深层证据仍是近似实现。
 - T57 `partial`: severity filter 可用，缺真实风险样例标定。
 - T58-T60 `done`: prompt、verdict 和 writeback 基础契约可用。
-- T61 `partial`: 并发 triage 与恢复可用，外部 LLM 失败策略仍需真实服务验证。
+- T61 `partial`: 并发 triage 与恢复可用；缺 key/网络失败已降级为 needs_review/deferred 路径并写入 warning/manifest，真实服务质量仍需验证。
 
 ### P5 当前判断
 

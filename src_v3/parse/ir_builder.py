@@ -53,6 +53,24 @@ def normalize_node_id(text: str) -> str:
     """
     return re.sub(r'[^a-zA-Z0-9_\-\.]', '_', text)
 
+def _record_extraction_failure(file_node: IRNode, stage: str, exc: Exception) -> None:
+    """
+    Keep parser sub-stage failures visible on the file node instead of silently
+    losing partial IR. V3 permits transparent fallback/partial parse, but the
+    degradation must be inspectable downstream through IR/manifest/reporting.
+    """
+    failures = file_node.attributes.setdefault("extraction_failures", [])
+    failures.append({
+        "stage": stage,
+        "error_type": exc.__class__.__name__,
+        "message": str(exc)
+    })
+    reasons = file_node.attributes.setdefault("degradation_reasons", [])
+    reason = f"parser extraction stage '{stage}' failed: {exc.__class__.__name__}: {exc}"
+    if reason not in reasons:
+        reasons.append(reason)
+    file_node.attributes["parse_partial"] = True
+
 def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserProvider, query_pack: Dict[str, Any]) -> Tuple[List[IRNode], List[IREdge]]:
     """
     Parses a single file and builds unified FileNode, SymbolNode, custom IRNodes and IREdges.
@@ -190,8 +208,8 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
                     resolution_kind="exact" if callee_target_id != f"sym_global_{normalize_node_id(callee_name)}" else "fuzzy",
                     provider_trace=[provider.provider_name]
                 ))
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_extraction_failure(file_node, "calls", exc)
 
         # 5. Extract TypeHints
         try:
@@ -219,8 +237,8 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
                     resolution_kind="exact",
                     provider_trace=[provider.provider_name]
                 ))
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_extraction_failure(file_node, "type_hints", exc)
 
         # 6. Extract Resources
         try:
@@ -248,8 +266,8 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
                     resolution_kind="exact",
                     provider_trace=[provider.provider_name]
                 ))
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_extraction_failure(file_node, "resources", exc)
 
         # 7. Extract Guards
         try:
@@ -277,8 +295,8 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
                     resolution_kind="exact",
                     provider_trace=[provider.provider_name]
                 ))
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_extraction_failure(file_node, "guards", exc)
 
         # 8. Extract States
         try:
@@ -306,8 +324,8 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
                     resolution_kind="exact",
                     provider_trace=[provider.provider_name]
                 ))
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_extraction_failure(file_node, "states", exc)
 
         # 9. Extract Entrypoints
         try:
@@ -335,12 +353,15 @@ def build_file_ir(file_path: str, repo_path: str, lang: str, provider: ParserPro
                     resolution_kind="exact",
                     provider_trace=[provider.provider_name]
                 ))
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_extraction_failure(file_node, "entrypoints", exc)
 
     except Exception as e:
         # If parsing fails, we still keep the FileNode but log/trace the error in attributes
         file_node.attributes["parse_error"] = str(e)
         file_node.attributes["parse_mode"] = "failed"
+        file_node.attributes["degradation_reasons"] = [
+            f"parser failed: {e.__class__.__name__}: {e}"
+        ]
         
     return nodes, edges

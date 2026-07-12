@@ -144,6 +144,13 @@ def run_three_lens_referee(
                 votes[vote_key] = "MAYBE"
         except Exception as e:
             warnings.append(f"Lens '{vote_key}' failed: {str(e)}")
-            votes[vote_key] = "ERROR"
-            votes["error"] = True
+            # External LLM/key/network failures are a verifier degradation, not a
+            # candidate processing error. Preserve indeterminate MAYBE votes so
+            # verdict_policy routes the candidate to needs_review/deferred while
+            # warnings and manifest degradation keep the failure visible.
+            votes[vote_key] = "MAYBE"
+            votes["degraded"] = True
+            votes.setdefault("degradation_reasons", []).append(
+                f"{vote_key}: {e.__class__.__name__}: {e}"
+            )
     return votes, warnings

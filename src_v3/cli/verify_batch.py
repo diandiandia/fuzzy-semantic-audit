@@ -242,7 +242,7 @@ def main():
                         if warnings:
                             # Log warning about LLM degradation
                             log_event(workspace_dir, "verify_batch", "warning", f"LLM triage degraded for candidate {cand.candidate_id}: {', '.join(warnings)}")
-                            if "LLM Triage degraded: api keys missing or query failed" not in plan.run_manifest.degradation_reasons:
+                            if plan.run_manifest and "LLM Triage degraded: api keys missing or query failed" not in plan.run_manifest.degradation_reasons:
                                 plan.run_manifest.degradation_reasons.append("LLM Triage degraded: api keys missing or query failed")
                                 
                         # Use LLM votes
