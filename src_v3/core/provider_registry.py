@@ -66,15 +66,15 @@ def resolve_semantic(lang: str, config: Dict[str, Any], repo_path: str = "", ir_
             elif degradation_list is not None:
                 degradation_list.append("codegraph preferred but codegraph_endpoint is missing in config")
         elif pref == "ctags":
-            if repo_path and ir_store:
+            if repo_path:
                 return CtagsProvider(repo_path, ir_store)
             elif degradation_list is not None:
-                degradation_list.append("ctags preferred but repo_path or ir_store is missing")
+                degradation_list.append("ctags preferred but repo_path is missing")
         elif pref == "null":
             return NullProvider()
             
     # Fallback default
-    if repo_path and ir_store:
+    if repo_path:
         return CtagsProvider(repo_path, ir_store)
     return NullProvider()
 
