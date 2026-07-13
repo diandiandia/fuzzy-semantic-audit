@@ -62,6 +62,7 @@ def main():
     parser = argparse.ArgumentParser(description="Python E2E orchestrator for Fuzzy Semantic Audit V3")
     parser.add_argument("--project", required=True, help="Path to the repository to audit")
     parser.add_argument("--workspace", help="Path to the workspace directory")
+    parser.add_argument("--tracks", help="Comma-separated list of audit tracks to enable")
     args = parser.parse_args()
     
     project_path = os.path.abspath(args.project)
@@ -76,6 +77,8 @@ def main():
     init_args = ["--project", project_path]
     if args.workspace:
         init_args += ["--workspace", os.path.abspath(args.workspace)]
+    if args.tracks:
+        init_args += ["--tracks", args.tracks]
     
     res = run_stage_with_retry("init_plan", init_args)
     if not res.get("ok"):
