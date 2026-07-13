@@ -19,8 +19,10 @@ def evaluate_verdict(
     exploit = str(votes.get("exploitability", "MAYBE")).upper()
     
     # 1. Processing or query errors -> Error state
-    if "ERROR" in [reach, guard, exploit] or votes.get("error"):
-        return "error", "Verification error occurred during referee lens query."
+    if "ERROR" in [reach, guard, exploit] or votes.get("error") or votes.get("degraded"):
+        reasons = ", ".join(votes.get("degradation_reasons", []))
+        detail = f": {reasons}" if reasons else ""
+        return "error", f"Verification error or LLM degradation occurred during referee lens query{detail}."
         
     # 2. Explicit deferral or capability-based deferral -> Deferred state
     if "DEFER" in [reach, guard, exploit] or "DEFERRED" in [reach, guard, exploit] or votes.get("deferred"):

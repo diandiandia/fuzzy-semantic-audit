@@ -5,7 +5,7 @@ from src_v3.core.models import CandidateRecord, IRNode
 from src_v3.storage.ir_store import IRStore
 
 def extract_features(
-    workspace_dir: str, 
+    repo_path: str, 
     candidate: CandidateRecord, 
     ir_store: IRStore
 ) -> Dict[str, float]:
@@ -118,7 +118,8 @@ def extract_features(
         
         # C. Parameter propagation analysis
         # Check if parameter signature or method body uses common input identifiers
-        symbol_body = sn.attributes.get("symbol_body", "").lower()
+        from src_v3.evidence.assembler import get_node_source
+        symbol_body = get_node_source(repo_path, sn).lower()
         input_keywords = ["req", "request", "param", "body", "arg", "data", "payload", "input", "user_id", "query"]
         
         # Base score on direct keyword matches

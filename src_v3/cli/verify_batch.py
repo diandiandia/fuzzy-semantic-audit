@@ -163,13 +163,12 @@ def main():
                     continue
                 votes = item.get("votes", {})
                 if votes.get("reachability") == "MAYBE" and votes.get("guarded") == "MAYBE":
-                    bundle = evidence_store.get_evidence(cand.candidate_id)
-                    if bundle:
-                        candidates_to_query.append((cand, bundle, item))
+                    candidates_to_query.append((cand, item))
 
-            def run_triage_worker(cand_bundle_item):
-                cand, bundle, item = cand_bundle_item
+            def run_triage_worker(cand_item):
+                cand, item = cand_item
                 try:
+                    bundle = evidence_store.get_evidence(cand.candidate_id)
                     llm_votes, warnings = run_three_lens_referee(cand, bundle, config)
                     return cand.candidate_id, llm_votes, warnings
                 except Exception as e:
