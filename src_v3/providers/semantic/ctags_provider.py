@@ -98,19 +98,19 @@ class CtagsProvider(SemanticProvider):
                 # Check if symbol is referenced (using word boundaries to avoid partial matches)
                 if sym_name in line:
                     if re.search(r'\b' + re.escape(sym_name) + r'\b', line):
-                    # Avoid matching its own definition
-                    line_num = idx + 1
-                    if fn.file == symbol_ref.get("file"):
-                        ref_span = symbol_ref.get("span", {})
-                        if ref_span.get("start") <= line_num <= ref_span.get("end"):
-                            continue # This is the definition itself, skip
+                        # Avoid matching its own definition
+                        line_num = idx + 1
+                        if fn.file == symbol_ref.get("file"):
+                            ref_span = symbol_ref.get("span", {})
+                            if ref_span.get("start") <= line_num <= ref_span.get("end"):
+                                continue # This is the definition itself, skip
 
-                    refs.append({
-                        "symbol": sym_name,
-                        "file": fn.file,
-                        "span": {"start": line_num, "end": line_num},
-                        "kind": "reference"
-                    })
+                        refs.append({
+                            "symbol": sym_name,
+                            "file": fn.file,
+                            "span": {"start": line_num, "end": line_num},
+                            "kind": "reference"
+                        })
         return refs
 
     def find_callers(self, symbol_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
