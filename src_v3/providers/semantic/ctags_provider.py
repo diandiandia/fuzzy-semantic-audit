@@ -13,6 +13,19 @@ class CtagsProvider(SemanticProvider):
         self.ir_store = ir_store
         self._file_cache = {}
         self._file_words = {}
+        self._word_to_files = None
+
+    def _build_word_index(self):
+        if self._word_to_files is not None:
+            return
+        self._word_to_files = {}
+        from src_v3.parse.file_classifier import FileClassifier
+        if self.ir_store:
+            for fn in self.ir_store.iter_file_nodes():
+                lang = FileClassifier.classify(fn.file)
+                words = self._get_file_words(fn.file)
+                for w in words:
+                    self._word_to_files.setdefault(w, {}).setdefault(lang, []).append(fn.file)
 
     def capability_level(self) -> str:
         # Ctags-style name and text matching is structural assistance, not semantic
@@ -79,18 +92,14 @@ class CtagsProvider(SemanticProvider):
         if sym_name.lower() in blacklist:
             return []
 
-        refs = []
-        # Walk and text-search files in the workspace
+        self._build_word_index()
         from src_v3.parse.file_classifier import FileClassifier
         target_lang = FileClassifier.classify(symbol_ref.get("file", ""))
-        for fn in self.ir_store.iter_file_nodes():
-            if FileClassifier.classify(fn.file) != target_lang:
-                continue
-            words = self._get_file_words(fn.file)
-            if sym_name not in words:
-                continue
+        matching_files = self._word_to_files.get(sym_name, {}).get(target_lang, [])
 
-            lines = self._get_file_lines(fn.file)
+        refs = []
+        for file_path in matching_files:
+            lines = self._get_file_lines(file_path)
             if not lines:
                 continue
 
@@ -100,14 +109,14 @@ class CtagsProvider(SemanticProvider):
                     if re.search(r'\b' + re.escape(sym_name) + r'\b', line):
                         # Avoid matching its own definition
                         line_num = idx + 1
-                        if fn.file == symbol_ref.get("file"):
+                        if file_path == symbol_ref.get("file"):
                             ref_span = symbol_ref.get("span", {})
                             if ref_span.get("start") <= line_num <= ref_span.get("end"):
                                 continue # This is the definition itself, skip
 
                         refs.append({
                             "symbol": sym_name,
-                            "file": fn.file,
+                            "file": file_path,
                             "span": {"start": line_num, "end": line_num},
                             "kind": "reference"
                         })
