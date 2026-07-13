@@ -96,7 +96,8 @@ class CtagsProvider(SemanticProvider):
 
             for idx, line in enumerate(lines):
                 # Check if symbol is referenced (using word boundaries to avoid partial matches)
-                if re.search(r'\b' + re.escape(sym_name) + r'\b', line):
+                if sym_name in line:
+                    if re.search(r'\b' + re.escape(sym_name) + r'\b', line):
                     # Avoid matching its own definition
                     line_num = idx + 1
                     if fn.file == symbol_ref.get("file"):
