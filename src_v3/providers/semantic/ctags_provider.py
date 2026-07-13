@@ -81,7 +81,11 @@ class CtagsProvider(SemanticProvider):
 
         refs = []
         # Walk and text-search files in the workspace
+        from src_v3.parse.file_classifier import FileClassifier
+        target_lang = FileClassifier.classify(symbol_ref.get("file", ""))
         for fn in self.ir_store.iter_file_nodes():
+            if FileClassifier.classify(fn.file) != target_lang:
+                continue
             words = self._get_file_words(fn.file)
             if sym_name not in words:
                 continue
