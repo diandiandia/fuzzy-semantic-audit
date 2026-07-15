@@ -1,9 +1,0 @@
-{
-  "provider_preference": [
-    "lsp",
-    "lsif",
-    "ctags"
-  ],
-  "fuzzy_resolution_policy": "enclosing_function",
-  "edge_normalization": {}
-}

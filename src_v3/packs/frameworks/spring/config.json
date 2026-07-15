@@ -1,6 +1,0 @@
-{
-  "route_patterns": ["Controller", "RequestMapping", "GetMapping", "PostMapping", "ResponseBody"],
-  "guard_patterns": ["Secured", "PreAuthorize", "PostAuthorize", "Authentication", "security"],
-  "resource_patterns": ["Repository", "CrudRepository", "JpaRepository", "EntityManager", "jdbc"],
-  "state_machine_patterns": ["status", "state", "save", "update"]
-}

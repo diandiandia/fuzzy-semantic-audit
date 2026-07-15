@@ -1,8 +1,0 @@
-from typing import List, Dict, Any
-from src_v3.providers.framework.base import FrameworkProvider
-
-class GinPack(FrameworkProvider):
-    framework_name: str = "GinPack"
-
-    def detect(self, repo_profile: Dict[str, Any], files: List[str]) -> bool:
-        return "gin" in repo_profile.get("frameworks", [])

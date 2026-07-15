@@ -1,6 +1,0 @@
-{
-  "route_patterns": ["POST", "GET", "PUT", "DELETE", "Handler", "c\\.JSON", "gin\\.Context"],
-  "guard_patterns": ["Auth", "Guard", "Token", "Verify", "Middleware"],
-  "resource_patterns": ["db", "gorm", "sql", "Query", "Find", "Save"],
-  "state_machine_patterns": ["status", "state", "status_code", "update"]
-}
