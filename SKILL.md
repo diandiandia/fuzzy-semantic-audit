@@ -1,75 +1,45 @@
 ---
-name: fuzzy-semantic-audit-v3
-description: Universal codebase security auditor with capability-aware fallback, unified IR, multi-stage candidate pruning, evidence assembly, and adversarial LLM triage (V3)
+name: fuzzy-semantic-audit-v4
+description: Universal multi-language codebase security auditor using local static pre-filtering and autonomous agentic call-chain taint analysis (V4)
 ---
 
-# Fuzzy Semantic Audit V3 — Custom Skill
+# Fuzzy Semantic Audit V4 — Custom Skill Specification
 
-> [!NOTE]
-> This folder constitutes a V3 custom skill for coverage-first, capability-aware, multi-language codebase security audits.
-
----
-
-## 🚀 Primary Goal
-
-V3 is designed to audit any repository with:
-
-1. explicit capability levels (`L0/L1/L2/L3`)
-2. transparent degradation (`full_semantic`, `semantic_fallback`, `lexical_fallback`, `rule_only`)
-3. unified IR-based recall
-4. static pruning before LLM triage
-5. standardized evidence packaging
-
-This branch contains the fully completed, E2E functional V3 implementation matching all V3 system and software design specifications.
-
-The main documents are:
-
-1. `REQUIREMENTS.md`
-2. `V3_SYSTEM_DESIGN.md`
-3. `V3_SOFTWARE_DESIGN.md`
-4. `V3_TASK_BREAKDOWN.md`
+> [!IMPORTANT]
+> **This workspace implements the V4 codebase security auditor. Any Agent, CLI tool, or external parser executing this skill MUST strictly adhere to the V4 architecture, requirements, and compliance rules documented here.**
 
 ---
 
-## 📚 What To Read
+## 🎯 V4 Core Objectives (The 8 Commandments)
 
-When working on V3, use the documents in this order:
+V4 is built to enforce a clean separation between **high-speed local static filtering** and **high-precision autonomous agentic verification**:
 
-1. `REQUIREMENTS.md`
-2. `V3_SYSTEM_DESIGN.md`
-3. `V3_SOFTWARE_DESIGN.md`
-4. `V3_TASK_BREAKDOWN.md`
-
-These four documents define:
-
-- product goals
-- architecture
-- software/module boundaries
-- executable implementation order
+1.  **Universal Multi-Language Support**: Support any codebase language (Java, C/C++, Python, Go, Rust, etc.) using Tree-Sitter parsing and regex fallback without compiler-level coupling.
+2.  **Language Discovery**: Scan the project, determine present programming languages, and record their source paths in `repo_profile.json`.
+3.  **CWE Security Profiling**: Associate each identified language with corresponding CWE security domains (e.g., Authz, Injection, StateMachine).
+4.  **AI-Generated Scan Packs**: Invoke an LLM to dynamically generate search keywords, regexes, and AST query schemas for each detected language, saving them as `scan_pack.json`.
+5.  **Local AST Pre-Filtering**: Perform a lightning-fast local AST/regex scan on source code to filter out 90%+ harmless nodes and identify Candidate Sinks.
+6.  **Severity Prioritization**: Calculate static scores for Candidates and sort them by severity (Critical -> High -> Medium -> Low) in `verify_queue.json`.
+7.  **Autonomous Agentic Triage**: Distribute candidates sequentially as "clues" to a Verifier Agent. The Agent utilizes local navigation tools (`find_callers`, `read_file_segment`, `find_implementations`) to trace callers and perform interactive taint analysis autonomously.
+8.  **Strict Serial Workflow Control**: Maintain a task queue ensuring all candidates are evaluated and proven strictly in order of their severity.
 
 ---
 
-## 🛠️ Current Branch Intent
+## 📚 Essential Documentation Index
 
-The `v3` branch is intended to be a clean V3 planning and implementation branch.
+When developing, configuring, or running V4, read and enforce compliance in this order:
 
-That means:
-
-1. V2 implementation files should not remain as active branch content.
-2. V3 work should be built under `src_v3/` and `workflows/v3_*`.
-3. Reports, state contracts, fallback semantics, and provider abstractions should follow the V3 documents.
+1.  **[REQUIREMENTS.md](file:///root/fuzzy-semantic-audit/REQUIREMENTS.md)**: Product goals and the 8 core commandments.
+2.  **[V4_SYSTEM_DESIGN.md](file:///root/fuzzy-semantic-audit/V4_SYSTEM_DESIGN.md)**: The hybrid pipeline architecture, system method specifications (APIs), and safety mitigations (Token limit cap, AST fallback, dynamic dispatch tools).
+3.  **[V4_TASK_BREAKDOWN.md](file:///root/fuzzy-semantic-audit/V4_TASK_BREAKDOWN.md)**: The executable step-by-step P0-P3 project milestones with Definition of Done (DoD).
+4.  **[rules/v4_development_compliance.md](file:///root/fuzzy-semantic-audit/rules/v4_development_compliance.md)**: The platform-level system prompt rules enforcing compliance and preventing architectural design drift.
 
 ---
 
-## ✅ Implementation Rule
+## 🛠️ V4 Project Structure & Boundaries
 
-If you are implementing V3 on this branch:
-
-1. follow `V3_TASK_BREAKDOWN.md`
-2. implement one task or one strongly related task group at a time
-3. keep fallback states explicit
-4. do not reintroduce V2-only assumptions such as:
-   - single-language dominance
-   - hidden fallback
-   - direct severity-based candidate deletion
-
+All V4 development must take place within these specific namespaces:
+*   **Source Code**: `src_v4/`
+*   **Workflow Orchestration**: `workflows/` (v4 version runner scripts)
+*   **Test Suite**: `tests/` (v4 verification scripts)
+*   **Runtime Cache & State**: `repo_profile.json`, `scan_pack.json`, `verify_queue.json`
