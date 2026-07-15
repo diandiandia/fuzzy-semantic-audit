@@ -1,126 +1,32 @@
-# Fuzzy Semantic Audit V3 —— 需求文档
+# Fuzzy Semantic Audit V4 —— 系统核心需求说明
 
-> 目标: 定义 Fuzzy Semantic Audit V3 的产品需求、功能边界、验收标准和实施优先级。
-> 本文档面向实现阶段,作为 `V3_SYSTEM_DESIGN.md`、`V3_SOFTWARE_DESIGN.md` 与 `V3_TASK_BREAKDOWN.md` 的上游输入。
+V4 版本的核心设计宗旨是：**面向多语言，结合“本地轻量静态粗筛”与“大模型智能体自主追踪验证”，实现高效、精准、完备的漏洞研判。**
 
----
-
-## 1. 项目目标
-
-V3 的目标不是继续在 V2 上局部修补,而是构建一套真正通用、能力透明、可降级、可扩展的代码审计 skill。
-
-系统必须满足:
-
-1. 任意语言仓库都可审计。
-2. 主流语言具备更深的语义审计能力。
-3. 降级路径必须透明。
-4. 召回结果必须可收敛到可 triage 规模。
-5. 输出必须区分 `verified`、`needs_review`、`false_positive`、`deferred`、`error`。
+以下是系统的 8 大最简核心需求：
 
 ---
 
-## 2. 核心需求
+### 1. 🌐 多语言支持 (Requirement 1)
+- 系统解析与扫描必须面向所有主流代码语言（如 Java, C/C++, Python, Go, Rust），不针对单一语言做编译器级强耦合。
 
-### 2.1 通用性
+### 2. 📂 语言发现与文件登记 (Requirement 2)
+- 系统在 Inventory 阶段必须自动扫描并判别项目中包含的语言，并将所有相关的物理文件路径分门别类记录到 `repo_profile.json` 中。
 
-系统必须:
+### 3. 🛡️ CWE 语言画像 (Requirement 3)
+- 系统必须为每类语言关联标准的安全漏洞维度（如 Authz, Injection, StateMachine, InputValidation），列举该语言可能存在的安全漏洞隐患。
 
-1. 支持多语言仓库与 monorepo。
-2. 不允许通过“主语言唯一化”忽略其他语言。
-3. 对弱支持语言至少提供 `L0/L1` 审计能力。
+### 4. 🧠 AI 动态规则打包 (Requirement 4)
+- 识别到语言后，系统必须调用大模型为该语言动态生成特征关键字、Tree-Sitter AST 匹配模式及正则表达式，并将这些规则打包输出为静态扫描规则。
 
-### 2.2 能力透明
+### 5. 🔍 AST 词法粗筛 (Requirement 5)
+- 系统必须利用上一步打包的静态扫描规则，在本地通过 AST（Tree-Sitter）和正则进行秒级的“粗筛（Pre-Filter）”，过滤掉 90% 以上的无害代码，找出潜在的问题候选点（Candidate Sinks）。
 
-系统必须:
+### 6. 📈 严重性优先级排序 (Requirement 6)
+- 系统必须在本地计算候选点的严重特征分数，并按 `Critical (危)`、`High (高危)`、`Medium`、`Low` 的严重性降序排列，写入待验证队列。
 
-1. 为运行、shard、candidate 显式标记 capability level。
-2. 为降级运行显式记录 `run_mode` 与 `degradation_reasons`。
-3. 在报告中展示 `indexed_fallback`、`recalled_fallback` 等状态。
+### 7. 🤖 智能体自主污点分析 (Requirement 7)
+- 对于高危/危候选点，系统必须将线索直接提交给拥有工具使用权（`read_file_segment`, `find_callers`, `find_implementations`）的自主安全智能体（AI Agent）。
+- Agent 必须模拟人类安全专家的思路，自行决定跳转并读取哪些文件，沿着调用链进行跨文件的数据流污点分析，最终做出可达性（Reachability）研判。
 
-### 2.3 统一数据平面
-
-系统必须:
-
-1. 用统一 IR 表达结构信息。
-2. 用统一 CandidateRecord 表达召回结果。
-3. 用统一 EvidenceBundle 表达验证输入。
-
-### 2.4 多阶段收敛
-
-系统必须:
-
-1. 支持高召回多通道 recall。
-2. 支持静态 pruning 与优先级排序。
-3. 支持 evidence assembly。
-4. 只让收敛后的候选进入 LLM triage。
-
-### 2.5 验证机制
-
-系统必须:
-
-1. 至少保留三个裁判视角:
-   - reachability
-   - guard
-   - exploitability
-2. 用结构化写回保存 verdict。
-3. 不允许因预算或调度问题直接把候选写成 `false_positive`。
-
----
-
-## 3. 约束
-
-系统不得:
-
-1. 把单一工具链当成唯一真相源。
-2. 把 fallback 伪装成 full semantic。
-3. 仅凭函数名去重候选。
-4. 把未审计候选伪装成已证伪结果。
-
----
-
-## 4. 实施优先级
-
-### P0
-
-1. 核心数据模型
-2. 状态机
-3. plan/run manifest
-4. storage/event log/metrics
-5. workflow 骨架
-
-### P1
-
-1. inventory
-2. parser providers
-3. IR builder 与 cache
-4. build_inventory/build_ir
-
-### P2
-
-1. semantic providers
-2. embedding providers
-3. provider registry
-4. build_index
-
-### P3
-
-1. framework packs
-2. recall pipeline
-3. candidate store
-4. recall_candidates
-
-### P4
-
-1. pruning
-2. evidence
-3. verify_batch
-4. reports
-
----
-
-## 5. 结论
-
-V3 的需求核心可以概括为一句话:
-
-> 构建一套对所有语言可审计、对主流语言可深审、对降级路径透明可见、并能把大规模召回稳定收敛到可 triage 规模的通用代码审计 skill。
-
+### 8. 📋 工作流串行验证机制 (Requirement 8)
+- 系统必须使用串行队列（Workflow Queue）控制。所有的验证任务必须按照优先级高低的严格次序被依次分发给 Agent 验证，禁止以任何杂乱或并行的非受控方式跳过验证，确保审计结论的百分之百完整性。
