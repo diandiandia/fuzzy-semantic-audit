@@ -1,6 +1,6 @@
 # Fuzzy Semantic Audit V4 —— 软件设计文档 (Software Design Document)
 
-本文件定义 V4 版本各软件模块的内部实现细节、数据结构契约（JSON Schema）、大模型提示词工程规范以及异常处理逻辑。本设计是编写代码的直接蓝图。
+本文件定义 V4 版本各软件模块的内部实现细节、数据结构契约（JSON Schema）、底层核心算法规范、大模型提示词工程以及异常处理逻辑。
 
 ---
 
@@ -106,12 +106,60 @@
 
 ---
 
-## 3. 大模型提示词设计 (Prompt Engineering Specs)
+## 3. 底层核心算法与实现细节 (Core Algorithmic Specifications)
 
-### 3.1 动态画像生成 Prompt (Rule Generator Prompt)
-*   **输入角色**：专家级静态代码分析工程师。
-*   **任务**：针对特定语言（如 Java），分析 CWE 安全规则，生成用于本地粗筛的代码特征。
-*   **输出格式约束**：强约束 JSON。
+### 3.1 P0 阶段：物理目录过滤器与相对路径规范化
+*   **物理过滤器**：在深度优先遍历项目目录时，系统预设 `EXCLUDED_DIRS` 静态哈希集合：
+    `{".git", ".agents", ".codex", ".audit_workspace_v3", "node_modules", "build", "target", "bin", "out", "__pycache__"}`。
+    在 `os.walk` 的迭代循环中，利用 `dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]` 进行原位裁剪，直接避免对无关目录的递归与文件系统 I/O。
+*   **路径相对化**：[LanguageDiscoverer.discover](file:///root/fuzzy-semantic-audit/V4_SOFTWARE_DESIGN.md#L141) 对匹配到的每个源码文件路径执行 `os.path.relpath(absolute_path, repo_path)`，将文件统一以相对于项目根目录的形式存盘，从而确保 `repo_profile.json` 具有跨平台/跨 CLI 的解析一致性。
+
+### 3.2 P1 阶段：动态规则的“插值模板机制”与 Fallback 解析降级
+*   **插值模板机制 (Interpolated Template)**：为了应对大模型现场直接编写 Tree-Sitter 查询 S-expressions 极易出现括号失衡或语法错误的问题，系统在本地维护了一套**各语言标准 AST 结构插值模版**（如 Java 方法声明、C++ 函数调用）。
+    *   大模型在动态生成规则时，只需返回高度概括的**安全特征关键字**（如 `"onCommand"`）；
+    *   系统在本地读取对应的 AST 模板，将 `${KEYWORD}` 占位符替换为 AI 生成的关键字，从而在本地渲染出 100% 语法无误的 Tree-sitter 查询语句。
+*   **Fallback 降级解析器**：在解析 `scan_pack.json` 时，系统将 `tree_sitter.Query(lang, query_str)` 包裹在 `try-except` 块中。如果抛出了语法解析异常（`QueryError`），系统将对此规则进行**安全降级**：
+    1.  自动抛弃报错的 AST 查询；
+    2.  转而启用大模型同时输出的 `keywords` 和 `regex_patterns`；
+    3.  使用 Python 内置的 `re` 正则引擎对文件进行行扫描，确保粗筛不被中断。
+
+### 3.3 P2 阶段：严重性特征加权打分矩阵 (Severity Scoring Matrix)
+静态初筛完成后，[SeverityScorer.score_and_queue](file:///root/fuzzy-semantic-audit/V4_SOFTWARE_DESIGN.md#L162) 将通过静态特征加权打分矩阵对 Candidate 进行危害度分值计算：
+
+| 评估维度 (Dimension) | 判定规则特征 (Feature Rule) | 加权得分 (Score) |
+| --- | --- | --- |
+| **控制流入口 (Entrypoint)** | 符号名包含 `onTransact`, `onCommand`, `handleShellCommand`, `main` | **+30 分** |
+| **参数特权性 (Privilege)** | 函数参数包含 `AttributionSource`, `Binder`, `UserHandle`, `Context` | **+30 分** |
+| **高危敏感词 (High Risk Key)** | 符号名包含 `remove`, `delete`, `permission`, `enable`, `disable` | **+20 分** |
+| **规则匹配密度 (Density)** | 命中的 AST 规则数 $\ge 2$ 或正则模式 $\ge 2$ | **+20 分** |
+
+*   **严重性评定标准**：
+    *   总分 $\ge 80$ 分：标记为 **`Critical` (危)**
+    *   $60 \le$ 总分 $< 80$ 分：标记为 **`High` (高危)**
+    *   总分 $< 60$ 分：标记为 `Medium/Low`
+    队列将严格按总分降序排列写入 `verify_queue.json`。
+
+### 3.4 P3 阶段：多态接口跳转与串行队列状态流转锁
+*   **多态与虚方法跳转 (Interface Resolver)**：当 Agent 在回溯 callers 调用链时，如果发现父级调用者是一个接口声明（例如 `IEngine.run()`），普通的方法名查找会导致分析断裂。
+    *   **解决逻辑**：工具 `find_implementations("IEngine")` 会被触发，在本地 AST 索引数据库中执行匹配，检索出所有 `class ... implements IEngine` 或 `extends IEngine` 的子类声明；
+    *   系统将这些子类具体实现（如 `MockEngine.java`, `RealEngine.java`）的方法签名返回给 Agent，Agent 随后对这些具体子类的 `run()` 执行 callers 回溯，穿透了多态和动态分发的限制。
+*   **串行队列状态流转锁 (State Transaction Lock)**：为了杜绝任何 CLI 跳过验证，[AuditOrchestrator](file:///root/fuzzy-semantic-audit/V4_SOFTWARE_DESIGN.md#L198) 对队列消费执行严格的排他性排队逻辑：
+    ```text
+    [PENDING] (待审)
+       │
+       ▼ (Orchestrator Pop 任务)
+    [VERIFYING] (研判中) ─── 独占拉起 VerifierAgent 运行 ReAct 验证
+       │
+       ├─► (成功验证) ──► 写入 reports/review_queue.md ──► [DONE] (已验证)
+       │
+       └─► (发生异常/熔断) ──► 写入 needs_review 队列 ──► [ERROR_NEEDS_REVIEW]
+    ```
+
+---
+
+## 4. 大模型提示词设计 (Prompt Engineering Specs)
+
+### 4.1 动态画像生成 Prompt (Rule Generator Prompt)
 ```text
 System: You are an expert static analysis rules engineer.
 User: Generate a scanner pack for the language: [Java], focusing on these security tracks: [authz, state_machine].
@@ -122,10 +170,7 @@ You must return a JSON object with:
 Strictly return JSON only.
 ```
 
-### 3.2 Verifier Agent 系统提示词 (ReAct Triage System Prompt)
-*   **输入角色**：经验丰富的高级安全审计专家。
-*   **任务**：使用本地提供的工具（`find_callers`，`read_file_segment`），一步步追溯 Candidate 漏洞的可达性。
-*   **推理格式**：遵循 Thought -> Action -> Observation -> Thought 结构。
+### 4.2 Verifier Agent 系统提示词 (ReAct Triage System Prompt)
 ```text
 System: You are an elite security auditor. You are given a suspicious code candidate line (the Sink).
 Your goal is to trace the execution path backwards to prove if any external inputs (the Source, e.g. Binder calls, HTTP endpoints) can reach this Sink without proper permission guards.
@@ -147,7 +192,7 @@ Path: [list the calling path in order]
 
 ---
 
-## 4. 智能体验证工具箱 (Agent Tools Class Implementation)
+## 5. 智能体验证工具箱 (Agent Tools Class Implementation)
 
 在 `src_v4/verify/tools.py` 中，工具的 Python 封装设计如下：
 
@@ -176,7 +221,7 @@ class AgentTools:
 
 ---
 
-## 5. 异常处理与预算保护 (Gaurds & Exception Handling)
+## 6. 异常处理与预算保护 (Guards & Exception Handling)
 
 在 `VerifierAgent.verify_candidate` 中必须设计严格的控制锁，以防 Agent 暴走或死循环：
 
@@ -202,7 +247,7 @@ class TokenBudgetGuard:
 
 ---
 
-## 6. 测试契约与质量保障 (DoD Tests)
+## 7. 测试契约与质量保障 (DoD Tests)
 
 对于核心开发，必须使用 **Test-Driven 思想**，确保每一个编写的模块都经过测试覆盖。
 在 `tests/` 目录中，为每个模块配置对应的测试用例：
