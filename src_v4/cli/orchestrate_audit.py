@@ -59,7 +59,7 @@ class AuditOrchestrator:
         print(f"Saved prioritized queue to: verify_queue.json")
         
         # 4. 串行循环验证
-        print("\n--- Phase 4: Sequential Agentic Verification ---")
+        print("\n--- Phase 4: Sequential Skill-Based Verification ---")
         tools = AgentTools(workspace_path, profile)
         verifier = VerifierAgent()
         
@@ -100,7 +100,7 @@ class AuditOrchestrator:
             cand["status"] = "VERIFYING"
             self._save_queue(queue, queue_path)
             
-            # 拉起 Verifier Agent 研判
+            # 拉起 Verifier Skill 研判
             result = verifier.verify_candidate(cand, tools)
             verdict = result.get("verdict", "NEEDS_REVIEW")
             reasoning_path = result.get("reasoning_path", [])
@@ -121,7 +121,7 @@ class AuditOrchestrator:
   ```
   {" -> ".join(reasoning_path)}
   ```
-- **Agent Analysis Summary**:
+- **Skill Analysis Summary**:
   {summary}
 ---
 """

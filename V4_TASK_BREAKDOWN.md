@@ -38,15 +38,15 @@
 
 ---
 
-## 🛠️ P3 阶段：智能体自主污点分析与串行 Workflow (对应诉求 7 & 8)
+## 🛠️ P3 阶段：审计 Skill 执行与串行 Workflow (对应诉求 7 & 8)
 
-- [x] **Task 3.1: 交互式 Agent Tools 箱开发**
-  - 在 `src_v4/tools/` 下，为 AI 智能体封装三项核心的本地代码图探索工具：
+- [x] **Task 3.1: 交互式 Skill Tools 箱开发**
+  - 在 `src_v4/tools/` 下，为审计 Skill 封装三项核心的本地代码图探索工具：
     1. `read_file_segment(path, lines)` (查看特定代码段)；
     2. `find_callers(symbol, file)` (查找上游调用点)；
     3. `find_implementations(interface)` (查找多态实现)。
-- [x] **Task 3.2: 自主审计智能体 (Verifier Agent)**
-  - 开发 `src_v4/verify/agentic_triage.py`。输入 Candidate 线索，拉起子 Agent，让其利用 Tools 自动自主分析调用路径与污点流动，直至给出 `YES (Reachable)` 或 `NO (Guarded)` 的可达性判定。
+- [x] **Task 3.2: 审计 Skill 执行器 (Verifier Skill)**
+  - 开发 `src_v4/verify/agentic_triage.py`。输入 Candidate 线索，利用提示词与工具上下文执行一次结构化审计判断，给出 `YES (Reachable)` 或 `NO (Guarded)` 的可达性判定。
 - [x] **Task 3.3: 队列串行 Workflow (Orchestration)**
-  - 在 `src_v4/cli/orchestrate_audit.py` 中，实现串行轮询控制。读取 `verify_queue.json`，确保所有 Candidate **按优先级严格次序被依次分发给 Agent 研判并回写结果**。
-  - **DoD**: 所有的 Candidate 都经过 Agent 的自主 Tool-Calling 跳转分析，且路径记录在最终报告中。
+  - 在 `src_v4/cli/orchestrate_audit.py` 中，实现串行轮询控制。读取 `verify_queue.json`，确保所有 Candidate **按优先级严格次序被依次分发给 Skill 执行器研判并回写结果**。
+  - **DoD**: 所有的 Candidate 都经过 Skill 的上下文检索与工具辅助分析，且路径记录在最终报告中。

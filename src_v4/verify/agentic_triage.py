@@ -10,7 +10,7 @@ from src_v4.verify.tools import AgentTools
 logger = logging.getLogger(__name__)
 
 class BudgetExceededException(Exception):
-    """Token or turn budget limit exceeded."""
+    """Skill execution budget limit exceeded."""
     pass
 
 class TokenBudgetGuard:
@@ -91,7 +91,8 @@ class VerifierAgent:
 
     def verify_candidate(self, candidate: dict, tools: AgentTools) -> dict:
         """
-        拉起子 Agent，载入 Tools，进行 ReAct 推理循环，追踪数据流，直至返回可达性报告。
+        接收 candidate 与上下文，调用提示词驱动的 skill 执行器，
+        通过工具辅助完成一次结构化审计判断并返回可达性报告。
         内置 Token 和调用深度熔断限制。
         """
         # 判断环境中是否配置了大模型 Key
@@ -195,7 +196,7 @@ Clues: {json.dumps(candidate.get("clues", {}), ensure_ascii=False)}
                     history.append("Observation: Error: Your output did not contain a valid Action or Verdict. Please try again adhering strictly to formatting rules.")
                     
         except BudgetExceededException as e:
-            logger.warning(f"Verifier Agent budget exceeded for candidate {candidate.get('candidate_id')}: {e}")
+            logger.warning(f"Verifier skill budget exceeded for candidate {candidate.get('candidate_id')}: {e}")
             return {
                 "candidate_id": candidate.get("candidate_id"),
                 "verdict": "NEEDS_REVIEW",
@@ -203,7 +204,7 @@ Clues: {json.dumps(candidate.get("clues", {}), ensure_ascii=False)}
                 "summary": f"熔断保护：智能体分析超过了预算上限（{guard.max_turns} 轮 / {guard.max_tokens} Token）。"
             }
         except Exception as e:
-            logger.error(f"Verifier Agent encountered error for candidate {candidate.get('candidate_id')}: {e}")
+            logger.error(f"Verifier skill encountered error for candidate {candidate.get('candidate_id')}: {e}")
             return {
                 "candidate_id": candidate.get("candidate_id"),
                 "verdict": "NEEDS_REVIEW",

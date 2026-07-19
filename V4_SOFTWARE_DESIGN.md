@@ -1,6 +1,6 @@
 # Fuzzy Semantic Audit V4 —— 软件设计文档 (Software Design Document)
 
-本文件定义 V4 版本各软件模块的内部实现细节、数据结构契约（JSON Schema）、底层核心算法规范、大模型提示词工程以及异常处理逻辑。
+本文件定义 V4 版本各软件模块的内部实现细节、数据结构契约（JSON Schema）、底层核心算法规范、大模型提示词工程以及异常处理逻辑。与系统定位保持一致，V4 作为一个运行在 CLI 上的审计 Skill 方案，而非通用自主 agent 框架。
 
 ---
 
@@ -170,10 +170,12 @@ You must return a JSON object with:
 Strictly return JSON only.
 ```
 
-### 4.2 Verifier Agent 系统提示词 (ReAct Triage System Prompt)
+### 4.2 Verifier Skill 系统提示词 (CLI Skill Prompt)
 ```text
 System: You are an elite security auditor. You are given a suspicious code candidate line (the Sink).
 Your goal is to trace the execution path backwards to prove if any external inputs (the Source, e.g. Binder calls, HTTP endpoints) can reach this Sink without proper permission guards.
+
+The CLI will provide the repository context, candidate clues, and a set of tools to support your analysis. You should produce a structured verdict and evidence path in the required format.
 
 You have access to these tools:
 - find_callers(symbol, file)
@@ -192,7 +194,7 @@ Path: [list the calling path in order]
 
 ---
 
-## 5. 智能体验证工具箱 (Agent Tools Class Implementation)
+## 5. 审计 Skill 工具箱 (Skill Tools Class Implementation)
 
 在 `src_v4/verify/tools.py` 中，工具的 Python 封装设计如下：
 
@@ -223,7 +225,7 @@ class AgentTools:
 
 ## 6. 异常处理与预算保护 (Guards & Exception Handling)
 
-在 `VerifierAgent.verify_candidate` 中必须设计严格的控制锁，以防 Agent 暴走或死循环：
+在 `VerifierAgent.verify_candidate` 中必须设计严格的控制锁，以防 Skill 执行暴走或死循环：
 
 ```python
 class TokenBudgetGuard:
