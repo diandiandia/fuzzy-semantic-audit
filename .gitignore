@@ -16,3 +16,4 @@ resources/pending_prompts_simple.json
 .claude
 event_log.jsonl
 .audit_workspace_v3_smoke/
+.agents/
